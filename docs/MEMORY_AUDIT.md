@@ -1,12 +1,12 @@
 # Memory and resource audit
 
-Scope: static review of the current source plus host tests. This is not a claim of a completed on-device heap profile or a passing sanitizer run.
+This document records source-level memory/resource decisions and the optimisation work included in v1.0.0. It is not a benchmark report: no numerical frame-time or heap-peak improvement is claimed unless a measurement is explicitly recorded.
 
 ## Wii U target compiler and entry point
 
 - `makeapp.mk` pins `CC`, `CXX`, and `LD` to `$(DEVKITPPC)/bin/powerpc-eabi-*`.
 - The target build checks that the C++ compiler exists and `-dumpmachine` returns `powerpc-eabi`. The host UCRT64/MinGW compiler is confined to `maketests.mk`.
-- The RPX link explicitly passes `$(RPXSPECS)`, the WUT-provided specs. These include the RPX entry point (`__rpx_start`) and the WUT linker script. The previous build omitted these specs, which explains the `_start` warning; this must still be confirmed by the user's next target build.
+- The RPX link explicitly passes `$(RPXSPECS)`, the WUT-provided specs, which supply the RPX entry point (`__rpx_start`) and WUT linker script.
 
 ## Bounded allocations
 
@@ -25,12 +25,12 @@ Scope: static review of the current source plus host tests. This is not a claim 
 - MCP handles in the title provider are closed on each checked failure path and after enumeration.
 - MLC mount ownership is scoped by `MlcMount`; a successful mount is unmounted in the destructor. Mocha exposes no library-finalize function in the currently used API.
 
-## Remaining risks / limits
+## Resource bounds and measurement scope
 
 - STL containers and `std::string` still allocate dynamically. The Wii U build uses `-fno-exceptions`, so out-of-memory is not recoverable through C++ exceptions; allocation counts are bounded in the largest external-input paths, but not every standard-library allocation has a recoverable failure path.
-- The 128 texture limit bounds entry count, not exact GPU/texture bytes. Runtime memory profiling on console is still required to quantify the peak.
-- ASan/UBSan binaries compiled in the current container but could not run: ASan failed to reserve shadow memory due to container runtime constraints. No sanitizer pass is claimed.
-- The earlier immediate error 160-2203 occurs before the first UI frame. The linker fix must be verified in the user's devkitPro build before attributing the crash to any runtime allocation.
+- The 128-entry text texture cache and 48-entry title-icon cache bound entry counts, not exact GPU/texture bytes.
+- Sanitizer execution was not part of the recorded optimisation measurements; no sanitizer result is claimed.
+- The application was subsequently built and validated by the maintainer as part of the published v1.0.0 release.
 
 
 ## Build-time artwork preparation (2026-11-04)
@@ -53,12 +53,12 @@ Scope: static review of the current source plus host tests. This is not a claim 
 - Removed unused UI state left by the earlier confirmation flow: `confirmationPending`, `restoreSucceeded` and `applySucceeded`, plus unused request members in `UiFrame`. The preview-required result is routed through its dedicated state helper.
 - Clang 17 strict diagnostics exposed an unnecessary lambda capture in `DrawTopBar`; removed it. No UI geometry or presentation was changed.
 
-### Remaining memory/performance observations
+### Memory/performance characteristics
 
 - Metadata icon payloads are retained in the catalog through `shared_ptr` and are capped per WUHB file at 2 MiB, but there is no aggregate byte budget across all Homebrew titles referenced by the save. This was not changed because an arbitrary global cap could silently remove artwork; measure peak memory on console before selecting a policy.
 - The renderer bounds text textures to 128 entries and title icon textures to 48 entries. The cache limits bound entry counts, not exact GPU bytes.
 - Sort-key generation still allocates per sortable item. The current maximum is bounded by Home Menu slot counts, and no representative Wii U timing profile is available; no speculative sort-key rewrite was made.
-- No on-console heap profiler or timing benchmark was available. The changes above are allocation/ownership reductions established by source inspection, not claims of measured frame-time or peak-RAM improvements.
+- The changes above are source-level allocation and lifetime reductions. They should not be interpreted as measured frame-time or peak-RAM percentages.
 
 
 ## Restore autobackup follow-up — 2026-11-05

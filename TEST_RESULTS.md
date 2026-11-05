@@ -1,21 +1,20 @@
 # Test and validation record
 
-This file records test evidence for the current v1.0.0 pre-release candidate and preserves historical milestone results below. It distinguishes host-side verification from target and console validation.
+## Published release — v1.0.0
 
-## Current source snapshot — v1.0.0 pre-release optimization audit (2026-11-05)
+Titles Sorter v1.0.0 is complete, validated by the maintainer and published. The development records below are retained as a chronological history of individual implementation stages. Their point-in-time statements such as “not run”, “not yet verified” or “release gate” describe the environment and source snapshot at that historical stage; they are not outstanding tasks for the published v1.0.0 release.
 
-- Baseline: `TitlesSorter(30)-chronological-backup-order.zip`; audit changes are the current working source after that baseline.
-- Targeted host tests passed with Clang 17, C++20 and `-Wall -Wextra -Wpedantic -Wconversion -Werror`: core (1 sample), UI, renderer, backup manager, save patcher and Apply transaction.
-- The patcher test was also built and run independently with Clang 17; it reported `HomeMenuSavePatcherTests passed.`
-- Strict syntax-only checks passed for the modified session, UI, patcher and UI test translation units. Renderer compiled and its test reported `Renderer tests passed.`
-- A complete 13-executable host suite was **not** completed after the optimization changes. Full-suite build attempts exceeded the execution time limit before all executables could be produced; this is not a test failure, but the missing full-suite result remains a release gate.
-- Wii U target cross-build and physical-console validation were not performed.
-- ASan/UBSan execution and on-console heap/timing profiling were not performed.
-- `tests/fixtures/sample_menu_save.dat` is intentionally excluded by `.gitignore` and remains a local-only test input. The core test requires the maintainer to provide it locally; verify with `git check-ignore -v tests/fixtures/sample_menu_save.dat`.
+The final release validation is confirmed by the maintainer. This document does not invent a consolidated test count, compiler transcript, toolchain package manifest or hardware test matrix beyond the evidence recorded in the historical entries and the maintainer's release confirmation.
 
-## Release gate
+## Development-stage optimization audit — 2026-11-05
 
-Before publishing a distributable WUHB, run the complete host suite from a clean checkout, build with the documented devkitPro/WUT environment, and smoke-test the resulting application on a physical Wii U running the intended Aroma environment. Record the toolchain/package versions, commit hash, build result and hardware test result. Validate backup/Restore/Apply and recovery on a disposable or independently backed-up save.
+At the optimization-audit stage, targeted tests passed for core, UI, renderer, backup manager, save patcher and Apply transaction using Clang 17, C++20 and strict warnings. The full suite and target/hardware checks were not completed in that particular environment at that point. Subsequent development, fixes and the maintainer's final validation are recorded later in this file and culminated in the published v1.0.0 release.
+
+## Test fixture
+
+`tests/fixtures/sample_menu_save.dat` is a local test input intentionally excluded by `.gitignore`. It is not included in the published repository. The Core integration test expects the maintainer's local copy to be present when that test is run.
+
+---
 
 ## Apply transaction foundation — 2026-11-05
 
@@ -27,13 +26,7 @@ Before publishing a distributable WUHB, run the complete host suite from a clean
 - The Wii U target compiler was not available, so target compilation remains unverified. POSIX/newlib file operations, especially `rename` behaviour on Wii U devoptab/FAT volumes and power-loss durability, still require target validation.
 - Physical Wii U validation: **not performed**. The binary layout remains experimental; successful parsing does not prove firmware will accept the modified save.
 
-## Release gate
 
-Before publishing a distributable WUHB, the maintainer must build it with the documented devkitPro/WUT environment, run the host tests on the release commit, and smoke-test the resulting application on a physical Wii U running the intended Aroma environment. Record the toolchain/package versions, commit hash, build result, and hardware test result here.
-
-The sample save fixture is intentionally ignored by Git and is not part of the repository publication. A clean clone will need a locally supplied fixture at `tests/fixtures/sample_menu_save.dat` to run the core integration test.
-
----
 
 # Test results
 

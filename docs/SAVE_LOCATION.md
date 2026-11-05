@@ -40,27 +40,10 @@ Aroma implementation and Homebrew On Wii U Menu save redirection behaviour.
 This component intentionally does not copy Menu Sort's save-writing logic.
 
 
-## Read-only acquisition layer (v0.9)
+## Read, write and recovery responsibilities
 
-`WiiUHomeMenuSaveReader` separates save acquisition from the platform filesystem
-implementation through `IReadOnlySaveFileSystem`. The adapter must implement
-only `GetFileSize` and `ReadExact`; it must not create, truncate, or write files.
+`WiiUHomeMenuSaveReader` and the Wii U platform adapter separate portable validation from device filesystem operations. The reader validates the expected save size before publishing a snapshot and reads the selected authoritative path exactly. The platform adapter owns ACT/MCP identity acquisition, volume access, file operations and transaction recovery.
 
-The reader performs these checks in order:
+The same resolved active path is used by the read and write workflows. Before parsing at startup, the platform adapter checks for interrupted Restore and Apply transactions and recovers the preserved original where required. Manual backup, Restore and Apply are exposed through the platform service; write operations are initiated only through the corresponding confirmed UI actions.
 
-1. Requires the console serial identity so it can probe the possible redirected
-   path. If serial identity is unavailable, it refuses to assume redirection is
-   absent.
-2. Probes the redirected path. `NotFound` permits the MLC path; any other probe
-   I/O failure aborts the operation.
-3. If the redirected file exists, it is selected as authoritative. No later
-   size/read failure can trigger MLC fallback.
-4. Checks the exact file size against `0x1FC44` before allocating the save buffer.
-5. Reads exactly that many bytes into a temporary buffer, publishing the
-   snapshot only after a successful complete read.
-
-The current implementation does not parse the binary structure, mount Wii U
-volumes, collect ACT/MCP identity, or include a concrete Wii U filesystem
-adapter. The file-size signature is based on the analysed sample and is a
-fail-closed compatibility gate, not proof that every firmware/save revision
-uses that size.
+The published v1.0.0 includes this acquisition and write integration. The maintainer completed final release validation on the Wii U.

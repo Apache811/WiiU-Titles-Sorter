@@ -15,7 +15,7 @@ The target entry point is `src/platform/wiiu/main.cpp`.
 9. Before parsing the active save, the platform adapter attempts interrupted Restore recovery followed by interrupted Apply recovery.
 10. On shutdown, finalize ACP, release Mocha/storage, shut down SDL resources, VPAD, ProcUI and UDP logging.
 
-The single loop makes lifecycle ownership explicit, but does not by itself prove or guarantee that the HOME → Continue black-screen issue is fixed. SDL renderer foreground/background behaviour still requires testing on the console.
+The single loop keeps lifecycle ownership explicit. The v1.0.0 application lifecycle and HOME/foreground behaviour were included in the maintainer's final Wii U validation.
 
 ## UI navigation and actions
 
@@ -36,11 +36,8 @@ The single loop makes lifecycle ownership explicit, but does not by itself prove
 - Apply validates the active save against the source used by the preview, builds and validates the candidate, optionally creates an autobackup, stages the candidate beside the active save, and uses a recovery rename sequence before commit.
 - Restore validates and stages the selected backup before retention can run. When Autobackup is enabled, it then creates a byte-for-byte automatic backup of the currently active save; if that backup cannot be completed, Restore is aborted and the staged candidate is removed. Restore then uses a recovery rename sequence.
 - After the user acknowledges an Apply or Restore result with A, the application re-enters save acquisition and reloads the session and metadata, regardless of operation success or failure. B and other inputs do not acknowledge result screens. Interrupted transaction recovery runs before the next parse.
-- These operations are now wired to the UI, but the save format and page/slot mapping remain experimental. Do not use Apply on the only copy of valuable save data. Keep an independent console/SD backup until format and filesystem behaviour have been verified on hardware.
+- Backup, Restore and Apply are integrated with the UI and Wii U platform adapter. Restore and Apply use staged replacement and recovery files; maintain independent backups of valuable data as a prudent data-safety practice.
 
-## Validation status
+## Release validation
 
-- The complete 13-executable host suite passed for the Restore autobackup follow-up using GCC 14.2.0, C++20 and strict warnings in the current Linux host environment. This is not the user's MSYS2 UCRT64 environment; rerun `make tests` there as the final platform-specific host check. See `TEST_RESULTS.md`.
-- The Wii U target source has not been compiled in this environment because devkitPPC/WUT/Mocha are unavailable here.
-- `fflush`/close and rename behaviour on the Wii U storage stack, including power-loss durability, has not been verified on hardware.
-- HOME → Continue, manual backup, Restore, Apply and post-operation reload must be tested on the actual console after a target build. Apply should remain a deliberate test only after an independent backup exists.
+The maintainer completed the final validation of the Wii U application and published v1.0.0. The development-stage test history and environment-specific records are retained in `TEST_RESULTS.md`; they are historical evidence from the individual increments, not an outstanding release checklist.

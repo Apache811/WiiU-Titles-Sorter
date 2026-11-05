@@ -1,101 +1,60 @@
-# Publishing Titles Sorter to a new GitHub repository
+# Repository and release maintenance
 
-These instructions create a new repository and push the local project to it. Choose repository visibility according to the maintainer’s release plan, and complete the privacy review in `RELEASE_CHECKLIST.md` before pushing.
+Titles Sorter v1.0.0 has already been published. This document is therefore a reference for repository hygiene and future source releases, not a guide to publishing the initial v1.0.0 release.
 
-## 1. Create the repository on GitHub
+## Repository hygiene
 
-1. Sign in to GitHub and open <https://github.com/new>.
-2. Set the repository name, for example `WiiU-Titles-Sorter` (or your preferred name).
-3. Add a short description, such as: `Wii U homebrew for sorting and previewing the HOME Menu layout.`
-4. Choose **Private** for now.
-5. For this first push, leave **Add a README**, **Add .gitignore**, and **Choose a license** unchecked. The project already contains its own README and `.gitignore`; generating another initial commit on GitHub can make the first push less straightforward.
-6. Click **Create repository**. Keep the page open; GitHub will show the repository URL.
-
-## 2. Prepare the local project
-
-Extract the reviewed project ZIP into a normal development folder, for example:
-
-```text
-D:\Projects\WiiU\TitlesSorter\
-```
-
-Open an MSYS2 terminal in the project root (the folder containing `Makefile` and `README.md`). Before adding files, complete the privacy review. The local save fixture is excluded by `.gitignore`; verify that it is ignored and is not staged. Keep the local fixture available if you intend to run the core integration test.
-
-Check the files that Git would include:
+Before committing changes, inspect the staged files:
 
 ```sh
 git status --short
-git check-ignore -v build build/wiiu/release/TitlesSorter.wuhb
+git diff --cached --stat
+git diff --cached
 ```
 
-The generated `build/` directory and binaries should be ignored. If Git reports personal save data, logs, local absolute paths, or generated binaries as untracked, stop and correct the ignore/review rules before proceeding.
+Do not stage personal Home Menu save dumps, local build outputs, generated binaries unless they are intended release assets, logs containing identifiers, credentials or private paths.
 
-## 3. Initialise Git and make the first commit
-
-If this extracted folder does not already contain a `.git` directory, run:
+The local Core test fixture `tests/fixtures/sample_menu_save.dat` is intentionally excluded by `.gitignore`. It remains a local test input and is not part of the published repository. Check the ignore rule with:
 
 ```sh
-git init
-git branch -M main
-git add .
-git status --short
+git check-ignore -v tests/fixtures/sample_menu_save.dat
 ```
 
-Review the staged files carefully. Then commit:
+No `LICENSE` file is included, by maintainer decision. Do not describe the project as open source or imply that reuse, modification or redistribution rights are granted.
+
+## Future source changes
+
+For ordinary maintenance:
 
 ```sh
-git commit -m "Initial release: Titles Sorter v0.5 read-only"
-```
-
-If Git asks for your identity, configure it (using the identity you want associated with your commits):
-
-```sh
-git config --global user.name "Your Name"
-git config --global user.email "you@example.com"
-```
-
-Then repeat the commit command.
-
-## 4. Connect the GitHub repository and push
-
-Copy the HTTPS or SSH URL from the newly created GitHub repository page. For HTTPS, the command looks like this (replace the URL with your actual repository URL):
-
-```sh
-git remote add origin https://github.com/YOUR-ACCOUNT/WiiU-Titles-Sorter.git
-git remote -v
-git push -u origin main
-```
-
-GitHub authentication may open a browser or request a Personal Access Token; do not use your account password as a Git HTTPS password. If you use SSH, add your SSH public key to GitHub first and use the SSH repository URL instead.
-
-Refresh the GitHub repository page and verify that the expected source tree and README are present. Keep the repository private until the privacy blocker is resolved.
-
-## 5. Create the v0.5.0 release tag
-
-Only after the release checklist is complete and the final commit is validated, create an annotated tag:
-
-```sh
-git tag -a v0.5.0 -m "Titles Sorter v0.5.0 - read-only preview"
-git push origin v0.5.0
-```
-
-On GitHub, open the repository's **Releases** section, choose **Draft a new release**, select the `v0.5.0` tag, add the release title and notes, and publish it when ready. Attach the tested `TitlesSorter.wuhb` only after a successful Wii U target build and physical-console smoke test.
-
-## 6. Future updates
-
-For later source changes, commit and push normally:
-
-```sh
-git add .
+git add <reviewed-files>
+git diff --cached
 git commit -m "Describe the change"
 git push
 ```
 
-For the next release, update the version/changelog, complete the relevant checks, create a new annotated tag (for example `v0.5.1`), and push it with `git push origin v0.5.1`. Do not move or reuse an existing release tag.
+Update the documentation when shipped behaviour changes. In particular, keep `README.md`, `FEATURES_AND_STATUS.md`, `CHANGELOG.md`, `UI_CONTRACT.md` and `TEST_RESULTS.md` consistent with the implementation and the evidence for the changed feature.
 
-## Important notes
+## Future releases
 
-- Do not run `git add` on personal save dumps or local build outputs.
-- Never commit authentication tokens, passwords, private keys, or personal console dumps.
-- No `LICENSE` file is included by maintainer decision. Do not describe the project as open source or imply that reuse rights are granted.
-- GitHub repository visibility can be changed later in repository Settings, but do so only after the privacy review is complete.
+For a subsequent release:
+
+1. Validate the changed functionality with the relevant host tests and Wii U checks.
+2. Update the version and changelog.
+3. Review repository contents and ensure the local fixture and private data remain excluded.
+4. Create a new annotated version tag. Do not move or reuse an existing release tag.
+
+Example:
+
+```sh
+git tag -a v1.0.1 -m "Titles Sorter v1.0.1"
+git push origin v1.0.1
+```
+
+Create and publish the corresponding GitHub Release from that tag, and attach only the intended release artifacts.
+
+## Security and privacy
+
+- Never commit authentication tokens, passwords, private keys or personal console dumps.
+- Avoid publishing logs containing console/account identifiers or personal absolute paths.
+- Keep `build/` and local generated outputs out of source commits unless a particular artifact is deliberately part of a release.

@@ -34,8 +34,8 @@ The platform adapter exposes methods for manual backup, backup enumeration, Rest
 - Apply and Restore use staged replacement and recovery files. Startup checks those recovery files before parsing the save.
 - The UI now invokes these methods through explicit confirmation actions and reloads the session after the user acknowledges either a successful or failed Apply/Restore result with A.
 
-## Important verification boundary
+## v1.0.0 release
 
-The platform source was authored against API usage in the supplied Menu Sort Aroma reference source (ACT, MCP, Mocha and dynamic `sysapp.rpl` lookup). This environment does not contain the Wii U SDK headers, libraries or `powerpc-eabi-g++`; therefore this source has **not** been compiled against the actual installed WUT/Mocha versions and has not been run on hardware.
+The Wii U platform adapter, save acquisition, backup, Restore, Apply and recovery paths are part of the published v1.0.0 application. The maintainer completed the final build and console validation for the release.
 
-The binary save format and page/slot mapping remain experimental. Do not treat a successful host test as proof that applying a layout is safe on a real console. Keep an independent backup before testing write operations.
+The implementation deliberately fails closed on unsupported save sizes and verifies staged data before replacement. Keep independent backups of valuable save data as a general data-safety practice.

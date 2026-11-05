@@ -1,4 +1,4 @@
-# Titles Sorter UI contract — v1.0.0 candidate
+# Titles Sorter UI contract — v1.0.0
 
 This document describes the current controller, frame model and SDL renderer contract. The Wii U frontend maps VPAD input to `UiInput`; the controller produces `UiFrame`; the renderer presents that frame.
 
@@ -23,12 +23,12 @@ This document describes the current controller, frame model and SDL renderer con
 - Folder Placement: Folders First / Mixed Alphabetically.
 - Sort Folder Contents: ON/OFF.
 - Excluded Pages: parsed expression edited through the Wii U software keyboard.
-- Preserve the established OPTIONS layout, interaction and `Edit Option` bottom-bar action.
+- Preserve the established OPTIONS layout, interaction and `Edit Text` bottom-bar action.
 
 ## PREVIEW
 
 - Entering PREVIEW from OPTIONS or APPLY starts generation immediately; A is not required.
-- Render the experimental 5×3 grid from `UiFrame::preview`.
+- Render the 5×3 grid from `UiFrame::preview`.
 - L/R changes pages with wraparound. A enters a folder; B returns to the previous Home Menu page/selection. ZL/ZR navigate to the adjacent sections as listed above.
 - The generating screen is shown before the generated preview is presented.
 

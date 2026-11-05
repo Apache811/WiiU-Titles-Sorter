@@ -1,6 +1,24 @@
 # Changelog
 
-Notable project changes are recorded here. Version numbers follow the `MAJOR.MINOR.PATCH` format. v0.5.0 was the read-only milestone; the current source is the v1.0.0 pre-release candidate with experimental backup, Restore and Apply support.
+Notable project changes are recorded here. Version numbers follow the `MAJOR.MINOR.PATCH` format. **v1.0.0 is the completed, validated and published release.** Entries below v1.0.0 document the chronological development history; any limitations recorded there describe the snapshot at that time, not the published release.
+
+## [1.0.0] — 2026-11-05 — Complete release
+
+### Included
+- Complete OPTIONS, PREVIEW and APPLY workflow.
+- Home Menu save discovery, parsing, sorting configuration and preview, including folder navigation.
+- Installed-title and Homebrew on Menu metadata and artwork handling, including Disc/vWii special cases and generic/lock artwork.
+- Separate settings persistence.
+- Byte-preserving manual and automatic backups, automatic-backup retention, and a combined newest-first Restore selector.
+- Optional pre-Restore autobackup when Autobackup is enabled; Restore is cancelled if that safety backup cannot be created.
+- Staged Restore and Apply operations with verification and recovery handling.
+- Result screens and post-operation session reload after acknowledgement.
+- Host test suite, build/resource pipeline and project documentation.
+
+### Release
+- v1.0.0 was validated and published by the maintainer.
+- `tests/fixtures/sample_menu_save.dat` remains local-only and excluded by `.gitignore`.
+- No `LICENSE` file is included, by maintainer decision.
 
 ## [0.5.0] — 2026-11-05 — Read-only preview milestone
 
