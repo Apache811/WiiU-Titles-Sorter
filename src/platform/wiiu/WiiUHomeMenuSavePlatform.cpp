@@ -1,5 +1,8 @@
 #include "platform/wiiu/WiiUHomeMenuSavePlatform.hpp"
 
+#include "core/HomeMenuSaveApplyTransaction.hpp"
+#include "core/HomeMenuSaveBackupManager.hpp"
+
 #include <coreinit/dynload.h>
 #include <coreinit/mcp.h>
 #include <mocha/mocha.h>
@@ -66,6 +69,16 @@ public:
         return SaveFileStatus::Success;
     }
 };
+
+bool RecoverApplyBeforeRead(const std::string& activePath, void*, std::string& error) {
+    // Restore is checked first because its recovery file may predate the newer
+    // Apply transaction implementation. Each recovery is conservative and
+    // preserves the original save until byte-for-byte verification succeeds.
+    HomeMenuSaveBackupManager backups;
+    if (!backups.RecoverInterruptedRestore(activePath, error)) return false;
+    HomeMenuSaveApplyTransaction transaction;
+    return transaction.RecoverInterruptedApply(activePath, error);
+}
 
 bool GetSystemMenuTitleId(std::uint64_t& titleId, std::string& error) {
     OSDynLoad_Module module{};
@@ -159,7 +172,61 @@ bool WiiUHomeMenuSavePlatform::ReadActiveSave(
     // The plugin's redirected file lives on the SD volume; MLC is only the
     // fallback path. Do not mount or access USB storage here.
     WiiUReadOnlyFileSystem fileSystem;
-    return ReadActiveHomeMenuSave(identity, fileSystem, snapshot, error);
+    return ReadActiveHomeMenuSave(identity, fileSystem, snapshot, error,
+                                  &RecoverApplyBeforeRead, nullptr);
+}
+
+
+const char* WiiUHomeMenuSavePlatform::BackupDirectory() noexcept {
+    return "fs:/vol/external01/wiiu/apps/TitlesSorter/backups";
+}
+
+bool WiiUHomeMenuSavePlatform::CreateManualBackup(
+    const WiiUHomeMenuSaveSnapshot& snapshot, std::string& createdPath,
+    std::string& error) const {
+    if (snapshot.location.activePath.empty()) {
+        error = "The active Home Menu save location is unavailable.";
+        return false;
+    }
+    HomeMenuSaveBackupManager manager;
+    return manager.CreateBackup(snapshot.location.activePath, BackupDirectory(),
+        SaveBackupKind::Manual, 0U, createdPath, error);
+}
+
+bool WiiUHomeMenuSavePlatform::ListBackups(
+    std::vector<SaveBackupEntry>& entries, std::string& error) const {
+    HomeMenuSaveBackupManager manager;
+    return manager.ListBackups(BackupDirectory(), entries, error);
+}
+
+bool WiiUHomeMenuSavePlatform::RestoreBackup(
+    const WiiUHomeMenuSaveSnapshot& snapshot, const std::string& backupPath,
+    bool createAutomaticBackup, std::size_t maxAutomaticBackups,
+    std::string& automaticBackupPath, std::string& error) const {
+    if (snapshot.location.activePath.empty()) {
+        error = "The active Home Menu save location is unavailable.";
+        return false;
+    }
+    HomeMenuSaveBackupManager manager;
+    return manager.RestoreBackup(backupPath, snapshot.location.activePath,
+        BackupDirectory(), createAutomaticBackup, maxAutomaticBackups,
+        automaticBackupPath, error);
+}
+
+ApplyTransactionResult WiiUHomeMenuSavePlatform::ApplyPreview(
+    const WiiUHomeMenuSaveSnapshot& snapshot, const SaveModel& model,
+    const PlanResult& plan, const SortOptions& options) const {
+    ApplyTransactionResult result;
+    if (snapshot.location.activePath.empty()) {
+        result.error = "The active Home Menu save location is unavailable.";
+        return result;
+    }
+    ApplyTransactionOptions transactionOptions;
+    transactionOptions.createAutomaticBackup = options.autoBackup;
+    transactionOptions.maxAutomaticBackups = options.maxAutoBackups;
+    HomeMenuSaveApplyTransaction transaction;
+    return transaction.Apply(model, plan, snapshot.location.activePath,
+        BackupDirectory(), transactionOptions);
 }
 
 } // namespace titles_sorter

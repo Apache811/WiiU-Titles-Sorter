@@ -502,11 +502,15 @@ PlanResult BuildDryRunPlan(const SaveModel& model,
     }
 
     // Every source index must be assigned at most once per independent container.
-    auto validateAssignments = [&plan](const std::vector<SlotAssignment>& assignments,
+    // Validate the fixed-size plan arrays in place; copying them into temporary
+    // vectors and allocating a dynamic seen-set serves no purpose here.
+    auto validateAssignments = [&plan](const SlotAssignment* assignments,
+                                        std::size_t assignmentCount,
                                         std::size_t capacity,
                                         std::string_view label) {
-        std::vector<bool> seen(capacity, false);
-        for (const SlotAssignment& assignment : assignments) {
+        std::array<bool, kMainSlotCount> seen{};
+        for (std::size_t i = 0; i < assignmentCount; ++i) {
+            const SlotAssignment& assignment = assignments[i];
             if (assignment.destinationIndex >= capacity) {
                 plan.errors.emplace_back(std::string(label) + ": destination out of range.");
                 continue;
@@ -523,13 +527,11 @@ PlanResult BuildDryRunPlan(const SaveModel& model,
         }
     };
 
-    std::vector<SlotAssignment> mainVector(plan.mainAssignments.begin(), plan.mainAssignments.end());
-    validateAssignments(mainVector, kMainSlotCount, "Home Menu");
+    validateAssignments(plan.mainAssignments.data(), plan.mainAssignments.size(),
+                        kMainSlotCount, "Home Menu");
     for (const PlannedFolder& folder : plan.folders) {
-        std::vector<SlotAssignment> assignments(
-            folder.assignments.begin(), folder.assignments.end());
-        validateAssignments(assignments, kFolderSlotCount,
-                            "Folder " + std::to_string(folder.folderId));
+        validateAssignments(folder.assignments.data(), folder.assignments.size(),
+                            kFolderSlotCount, "Folder " + std::to_string(folder.folderId));
     }
 
     plan.valid = plan.errors.empty();

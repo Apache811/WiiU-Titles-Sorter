@@ -17,12 +17,14 @@ std::string Serialize(const SortOptions& options) {
         if (i != 0U) excluded += ',';
         excluded += std::to_string(options.excludedPages[i]);
     }
-    return std::string("version=1\n") +
+    return std::string("version=2\n") +
         "sort_field=" + std::to_string(static_cast<unsigned>(options.field)) + "\n" +
         "folder_placement=" + std::to_string(static_cast<unsigned>(options.folderPlacement)) + "\n" +
         "sort_folder_contents=" + (options.sortFolderContents ? "1\n" : "0\n") +
         "sort_folders_by_contents=" + (options.sortFoldersByContents ? "1\n" : "0\n") +
-        "excluded_pages=" + excluded + "\n";
+        "excluded_pages=" + excluded + "\n" +
+        "autobackup=" + (options.autoBackup ? "1\n" : "0\n") +
+        "max_autobackups=" + std::to_string(options.maxAutoBackups) + "\n";
 }
 
 bool ParseUnsigned(std::string_view value, unsigned maximum, unsigned& result) {
@@ -42,6 +44,9 @@ bool ParseUnsigned(std::string_view value, unsigned maximum, unsigned& result) {
 bool ParseContent(std::string_view content, SortOptions& options, std::string& error) {
     SortOptions parsed{};
     bool versionSeen = false;
+    unsigned fileVersion = 0U;
+    bool autoBackupSeen = false;
+    bool maxAutoBackupsSeen = false;
     bool sortFieldSeen = false;
     bool placementSeen = false;
     bool contentsSeen = false;
@@ -60,10 +65,11 @@ bool ParseContent(std::string_view content, SortOptions& options, std::string& e
         const std::string_view value = line.substr(separator + 1U);
         unsigned number = 0U;
         if (key == "version") {
-            if (versionSeen || !ParseUnsigned(value, 1U, number) || number != 1U) {
+            if (versionSeen || !ParseUnsigned(value, 2U, number) || (number != 1U && number != 2U)) {
                 error = "Unsupported settings file version."; return false;
             }
             versionSeen = true;
+            fileVersion = number;
         } else if (key == "sort_field") {
             if (sortFieldSeen || !ParseUnsigned(value, 3U, number)) { error = "Invalid sort_field setting."; return false; }
             parsed.field = static_cast<SortField>(number); sortFieldSeen = true;
@@ -82,12 +88,25 @@ bool ParseContent(std::string_view content, SortOptions& options, std::string& e
             auto pages = ParseExcludedPages(value, kMaximumExcludedPage, parseError);
             if (!pages) { error = "Invalid excluded_pages setting: " + parseError; return false; }
             parsed.excludedPages = std::move(*pages); excludedSeen = true;
+        } else if (key == "autobackup") {
+            if (autoBackupSeen || !ParseUnsigned(value, 1U, number)) {
+                error = "Invalid autobackup setting."; return false;
+            }
+            parsed.autoBackup = number != 0U;
+            autoBackupSeen = true;
+        } else if (key == "max_autobackups") {
+            if (maxAutoBackupsSeen || !ParseUnsigned(value, 100U, number) || number == 0U) {
+                error = "Invalid max_autobackups setting."; return false;
+            }
+            parsed.maxAutoBackups = number;
+            maxAutoBackupsSeen = true;
         } else {
             error = "Unknown settings key."; return false;
         }
     }
     if (!versionSeen || !sortFieldSeen || !placementSeen || !contentsSeen ||
-        !foldersContentsSeen || !excludedSeen) {
+        !foldersContentsSeen || !excludedSeen ||
+        (fileVersion >= 2U && (!autoBackupSeen || !maxAutoBackupsSeen))) {
         error = "Settings file is incomplete."; return false;
     }
     options = std::move(parsed);

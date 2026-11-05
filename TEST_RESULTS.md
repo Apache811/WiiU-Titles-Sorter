@@ -1,21 +1,37 @@
 # Test and validation record
 
-This file records test evidence for the current v0.5 read-only source snapshot. It distinguishes host-side verification from target and console validation.
+This file records test evidence for the current v1.0.0 pre-release candidate and preserves historical milestone results below. It distinguishes host-side verification from target and console validation.
 
-## Current source snapshot — 2026-11-04
+## Current source snapshot — v1.0.0 pre-release optimization audit (2026-11-05)
 
-- Host test suite: **10/10 test executables passed** using GCC 14.2.0, C++20, and strict warning flags (`-Wall -Wextra -Wpedantic -Wconversion -Werror`). Command used in the Linux verification environment: `make tests HOST_CXX=/usr/bin/g++`.
-- Resource pipeline: **passed** with Python 3 and Pillow; all bundled runtime artwork was generated and checked.
-- Wii U conditional provider and renderer source branches: **syntax-only checks passed** against local mock declarations. These checks do not replace a devkitPPC target build.
-- Wii U target cross-build/link: **not performed** for this snapshot.
-- Physical Wii U validation: **not performed** for this snapshot. Startup, HOME-menu resume, MCP/ACP metadata, Homebrew on Menu WUHB artwork, Disc/vWii artwork and final UI appearance still require console testing.
-- Sanitizer execution: **not validated** in the container because AddressSanitizer could not reserve its shadow-memory range. This is not a passing sanitizer result.
+- Baseline: `TitlesSorter(30)-chronological-backup-order.zip`; audit changes are the current working source after that baseline.
+- Targeted host tests passed with Clang 17, C++20 and `-Wall -Wextra -Wpedantic -Wconversion -Werror`: core (1 sample), UI, renderer, backup manager, save patcher and Apply transaction.
+- The patcher test was also built and run independently with Clang 17; it reported `HomeMenuSavePatcherTests passed.`
+- Strict syntax-only checks passed for the modified session, UI, patcher and UI test translation units. Renderer compiled and its test reported `Renderer tests passed.`
+- A complete 13-executable host suite was **not** completed after the optimization changes. Full-suite build attempts exceeded the execution time limit before all executables could be produced; this is not a test failure, but the missing full-suite result remains a release gate.
+- Wii U target cross-build and physical-console validation were not performed.
+- ASan/UBSan execution and on-console heap/timing profiling were not performed.
+- `tests/fixtures/sample_menu_save.dat` is intentionally excluded by `.gitignore` and remains a local-only test input. The core test requires the maintainer to provide it locally; verify with `git check-ignore -v tests/fixtures/sample_menu_save.dat`.
+
+## Release gate
+
+Before publishing a distributable WUHB, run the complete host suite from a clean checkout, build with the documented devkitPro/WUT environment, and smoke-test the resulting application on a physical Wii U running the intended Aroma environment. Record the toolchain/package versions, commit hash, build result and hardware test result. Validate backup/Restore/Apply and recovery on a disposable or independently backed-up save.
+
+## Apply transaction foundation — 2026-11-05
+
+- Host suite: **13/13 test executables passed** with GCC 14.2.0 and `-std=c++20 -O0 -g -Wall -Wextra -Wpedantic -Wconversion -Werror`.
+- Added `HomeMenuSaveApplyTransaction`: checks the active save still byte-matches the preview source, validates the in-memory patch candidate, creates an autobackup when enabled, stages and rereads the candidate, preserves the original under a recovery name, commits by sibling rename, verifies the installed bytes and rolls back on verification failure.
+- Added `RecoverInterruptedApply`, which restores the preserved original when a previous transaction left a recovery file. The Wii U save acquisition adapter now invokes it on the authoritative active path before reading the save; host reader tests verify callback ordering and path selection.
+- Added host tests for automatic backup, stale-save rejection without mutation, apply with autobackup disabled, and recovery from an interrupted rename sequence.
+- `makeapp.mk` discovers `src/core/*.cpp` automatically, so the new core source is included in the target source scan without changing the user's main `Makefile`.
+- The Wii U target compiler was not available, so target compilation remains unverified. POSIX/newlib file operations, especially `rename` behaviour on Wii U devoptab/FAT volumes and power-loss durability, still require target validation.
+- Physical Wii U validation: **not performed**. The binary layout remains experimental; successful parsing does not prove firmware will accept the modified save.
 
 ## Release gate
 
 Before publishing a distributable WUHB, the maintainer must build it with the documented devkitPro/WUT environment, run the host tests on the release commit, and smoke-test the resulting application on a physical Wii U running the intended Aroma environment. Record the toolchain/package versions, commit hash, build result, and hardware test result here.
 
-Before publishing the repository publicly, replace `tests/fixtures/sample_menu_save.dat` with a synthetic fixture and retain equivalent integration coverage, or generate the fixture at test runtime. The current fixture is derived from a user-provided sample and must not be made public.
+The sample save fixture is intentionally ignored by Git and is not part of the repository publication. A clean clone will need a locally supplied fixture at `tests/fixtures/sample_menu_save.dat` to run the core integration test.
 
 ---
 
@@ -157,3 +173,149 @@ Not verified: devkitPPC/WUT target build and Wii U console runtime. SDL_image lo
 - XML entity decoding now also applies to ACP strings and Homebrew on Menu INI values, including named and numeric entities.
 - Added regression tests for entity decoding, special-channel fallback metadata, Title ID/Product Code labels and sort order, and TGA decoder fallback.
 - Host test suite: **10/10 passed** using GCC 14.2.0, C++20, `-Wall -Wextra -Wpedantic -Wconversion -Werror`. This environment used `/usr/bin/g++` with the project's SDL/WUT test doubles. The provider and renderer `__WIIU__` branches also passed syntax-only compilation against test/mock declarations. Full devkitPPC/WUT linking and physical-console icon validation were not run.
+
+
+## 2026-11-05 — Wii U backup platform integration foundation
+
+- Command: `make -f maketests.mk tests HOST_CXX=g++ HOST_BUILD=build/tests-linux`
+- Result: **13/13 host test executables passed** with GCC 14.2.0, C++20, `-Wall -Wextra -Wpedantic -Wconversion -Werror`.
+- Added a Restore crash-recovery regression test; the simulated active candidate is replaced by the validated `.restore.previous` original.
+- Platform methods are included in `src/platform/wiiu` and are picked up by `makeapp.mk` source discovery. The Wii U platform source itself was not compiled in this environment because WUT/Mocha target headers and devkitPPC are unavailable.
+- No Wii U build or console test was performed. The platform API is not yet wired to UI actions.
+
+
+## 2026-11-05 — APPLY UI integration
+
+- Command: `make -f maketests.mk tests HOST_CXX=g++ HOST_BUILD=build/tests-linux`
+- Result: **13/13 host test executables passed** with GCC 14.2.0, C++20, `-Wall -Wextra -Wpedantic -Wconversion -Werror`.
+- Extended UI tests cover APPLY/OPTIONS/PREVIEW shoulder navigation, default autobackup values, max-backup numeric validation, manual-backup confirmation, backup selection/Restore confirmation and Apply confirmation.
+- Renderer tests passed after adding APPLY panel, scrollable backup selector, confirmation presentation and three-tab top bar.
+- Wii U target build not run: `DEVKITPRO` and `DEVKITPPC` are unset and `powerpc-eabi-g++` is not available in this environment. Physical Wii U testing not performed.
+- Important: passing host tests does not verify Wii U devoptab/FAT rename semantics, power-loss durability or the experimental save-format assumptions.
+
+## 2026-11-05 — UCRT64 `mkdir` portability correction
+
+- User-reported failure: UCRT64 declares `mkdir(const char*)`, while the backup manager called the POSIX two-argument form.
+- Fix: include `<direct.h>` on `_WIN32` and call `_mkdir(path.c_str())`; retain `mkdir(path.c_str(), 0777)` on POSIX/Wii U.
+- Command run in the available Linux environment: `make tests HOST_CXX=g++ HOST_BUILD=build/tests-linux`.
+- Result: **13/13 test executables passed**, with C++20 and `-Wall -Wextra -Wpedantic -Wconversion -Werror`.
+- Limitation: this execution environment does not contain MSYS2 UCRT64 GCC, so the exact Windows-native `make tests` rerun was not possible here. The reported signature mismatch is directly corrected, but confirmation on the user's UCRT64 installation is still required.
+
+
+## 2026-11-05 — Backup-manager test harness portability
+
+- Root cause from the user's UCRT64 run: `HomeMenuSaveBackupManagerTests.cpp` used `std::system("mkdir -p ...")`. Under Windows, `std::system` dispatches to the Windows command interpreter, which rejects the POSIX `-p` argument (`Sintassi del comando errata.`); fixture creation then failed at `assert(out.good())`.
+- Replaced shell directory commands with `std::filesystem::create_directories` and `std::filesystem::remove_all`.
+- Verification command: `make -f maketests.mk tests HOST_CXX=g++ HOST_BUILD=build/tests-linux`.
+- Result: **13/13 host test executables passed** with C++20, `-Wall -Wextra -Wpedantic -Wconversion -Werror`.
+- Limitation: this environment does not contain MSYS2 UCRT64, so the exact Windows-native rerun has not yet been performed.
+
+## 2026-11-05 — UCRT64 backup-manager cleanup portability
+
+- User-reported failure: `std::filesystem::remove_all(root, filesystemError)` returned an error at the final test cleanup assertion.
+- Root cause: the test kept `recovered` (`std::ifstream`) open after reading `active`, then attempted to delete the test directory. Windows does not permit deleting an open file in this situation.
+- Fix: explicitly call `recovered.close()` before the final `remove_all`.
+- Verification: all 13 host test executables passed with GCC C++20 and `-Wall -Wextra -Wpedantic -Wconversion -Werror`.
+- The MSYS2 UCRT64 run and Wii U target build remain unverified in this environment.
+
+
+## Wii U target build follow-up
+- Diagnosed the reported target compilation failure as a stale/mistyped include path in `WiiUHomeMenuSavePlatform.hpp`. The include now references the existing `WiiUHomeMenuSaveReader.hpp`.
+- Host test status remains 13/13 passed in the user's UCRT64 environment. Wii U target compilation must be rerun with devkitPPC; it has not yet been verified after this correction.
+
+
+## 2026-11-05 — OPTIONS/PREVIEW regression correction
+
+- Restored the v0.5 OPTIONS interaction and bottom-bar presentation; the APPLY panel retains its current controls.
+- Restored immediate Preview generation on entry (ZR from OPTIONS, ZL from APPLY); no A press is required.
+- UI tests now assert the explicit routes: OPTIONS (ZL → APPLY, ZR → PREVIEW), PREVIEW (ZL → OPTIONS, ZR → APPLY), APPLY (ZL → PREVIEW, ZR → OPTIONS).
+- Command: `make -f maketests.mk tests HOST_CXX=g++ HOST_BUILD=build/tests-ui-restore`
+- Result: **13/13 host test executables passed** with GCC C++20, `-Wall -Wextra -Wpedantic -Wconversion -Werror`.
+- No Wii U target build or physical-console test was performed for this UI correction.
+
+
+## 2026-11-05 — APPLY layout and confirmation refinement
+
+- Command: `make -f maketests.mk tests HOST_CXX=g++ HOST_BUILD=build/tests-linux`
+- Result: **13/13 host test executables passed** with GCC C++20 and `-Wall -Wextra -Wpedantic -Wconversion -Werror`.
+- UI coverage verifies Autobackup is changed only by Left/Right, Create Backup opens a dedicated modal, modal navigation/shoulder input is ignored, B cancels and A confirms, and Apply uses the same A/B modal behaviour.
+- Renderer coverage exercises the Create Backup and Apply confirmation frames.
+- Wii U target build and physical-console testing were not performed.
+
+## 2026-11-05 — APPLY operation-result and Restore decision flow
+
+- Command: `make -f maketests.mk tests HOST_CXX=g++ HOST_BUILD=build/tests-linux`
+- Result: **13/13 host test executables passed** with GCC C++20 and `-Wall -Wextra -Wpedantic -Wconversion -Werror`.
+- Added controller coverage for immediate Create Backup dispatch, success/failure result frames, A-only acknowledgement, Restore decision with selected full path, B returning to the selector, A dispatching Restore, success/failure Restore results, delayed reload until acknowledgement, and Apply decision A/B behaviour.
+- Added renderer coverage for decision and operation-result frames and their custom bottom-bar mode.
+- Wii U target build and physical-console testing were not performed; devkitPPC is unavailable in this environment.
+
+## 2026-11-05 — APPLY modal typography and footer refinement
+
+- Command: `make -f maketests.mk tests HOST_CXX=g++ HOST_BUILD=build/tests-linux`
+- Result: **13/13 host test executables passed** with GCC C++20 and `-Wall -Wextra -Wpedantic -Wconversion -Werror`.
+- Renderer changes: no confirmation/result border panel; decision fonts 2x (42→84, detail 30→60); result fonts 2x (48→96, detail 28→56); decision footer now includes B/Cancel in addition to centred HOME/Exit and A/Confirm. Result footer remains HOME/Exit plus A/Confirm, with B disabled.
+- Main APPLY panel: first four controls shifted down 25 logical pixels; Apply control retains its previous Y position.
+- Wii U target build and physical-console testing were not performed.
+
+
+## 2026-11-05 — APPLY confirmation typography +25%
+
+- Renderer font sizes updated: Create Backup result 48→60 px and detail 28→35 px; Restore decision 42→53 px and selected path 30→38 px; Apply decision 42→53 px.
+- Verification: `TitlesSorterRenderer.cpp` compiled successfully using GCC C++20 with `-Wall -Wextra -Wpedantic -Wconversion -Werror`. The full 13-executable suite was not completed in this environment.
+- Wii U cross-build and physical-console validation were not performed.
+
+## Apply result lifecycle correction
+- UI tests cover Apply success/failure result states, autobackup-path reporting, A-only acknowledgement, and deferred reload request on success only.
+- Renderer tests cover the new Apply result screen.
+- Target Wii U build and hardware validation remain pending.
+
+## Renderer present-count test correction — 2026-11-05
+
+- User-reported failure: `RendererTests.cpp:114`, expected `GetSdlMockStats().presentCalls == 10U` after drawing the Preview frame.
+- Root cause: the test had already drawn ten frames (including the new `PreviewRequired` modal), then drew the Preview frame, which correctly increments `SDL_RenderPresent` to eleven. The final assertion was not updated for that additional draw.
+- Fix: changed only the final Preview-frame assertion to `11U`. The earlier assertion after `Screen::GeneratingPreview` remains `10U`.
+- Verification: rebuilt and ran the renderer test with GCC C++20 and `-Wall -Wextra -Wpedantic -Wconversion -Werror`; result: **passed** (`Renderer tests passed.`).
+- This was a test expectation correction; no renderer production code was changed. The complete 13-executable suite, Wii U target build, and physical-console test were not run as part of this correction.
+
+## 2026-11-05 — Mixed backup chronological ordering
+
+- `HomeMenuSaveBackupManagerTests` passed after adding a regression test with manual and automatic backups interleaved by timestamp.
+- Verified the enumeration order is newest-first across both backup types, rather than lexicographic order of the full filename (which grouped the two prefixes incorrectly).
+- Compiler: GCC C++20 with `-Wall -Wextra -Wpedantic -Wconversion -Werror`.
+- The complete 13-executable host suite, Wii U target build and physical-console test were not run for this increment.
+
+
+## 2026-11-05 — v1.0.0 pre-release optimization audit
+
+- Targeted tests: core, UI, renderer, backup manager, patcher and Apply transaction passed with Clang 17 / C++20 / strict warnings.
+- Full suite: not completed after the optimization pass; compilation/linking exceeded the available command time limit.
+- Wii U cross-build, physical-console testing, sanitizer execution and memory/frame-time profiling: not performed.
+
+
+## Restore autobackup change
+
+- `HomeMenuSaveBackupManagerTests`: passed with GCC 14.2.0, C++20, `-Wall -Wextra -Wpedantic -Wconversion -Werror`.
+- Coverage verifies that the pre-Restore active save is preserved byte-for-byte in an automatic backup before the selected backup is installed.
+- The selected backup is loaded before automatic-backup retention runs, so retention cannot remove the file being restored during the operation.
+- UI test coverage was added for displaying the autobackup path on a successful Restore result, but the full UI test executable did not finish compiling within this environment's time limit.
+- Wii U platform build and hardware testing have not been performed.
+
+
+## 2026-11-05 — Restore autobackup targeted follow-up
+
+- Built `HomeMenuSaveBackupManagerTests` with GCC 14.2.0, C++20, `-O2 -Wall -Wextra -Wpedantic -Wconversion -Werror`; executable passed.
+- Added coverage proving a selected automatic backup can be removed by the retention pass while the staged Restore still completes with the correct bytes.
+- Added coverage proving an invalid automatic-retention limit causes pre-Restore autobackup creation to fail, Restore to abort, the staging file to be removed, and the active save to remain byte-for-byte unchanged.
+- The targeted test uses the existing supplied sample fixture. No complete 13-executable suite, Wii U cross-build, sanitizer run, or physical-console test was performed for this increment.
+
+- Follow-up validation: the complete 13-executable host suite subsequently passed using native GCC 14.2.0 / Linux, C++20 `-O0`, and `-Wall -Wextra -Wpedantic -Wconversion -Werror`. Command: `make -f maketests.mk tests HOST_CXX=g++ HOST_BUILD=/tmp/ts32-full CXXFLAGS='-std=c++20 -O0'`. This validates the complete host suite in this container, but is not a substitute for rerunning the project's documented MSYS2 UCRT64 command on the release workstation.
+
+
+## Windows UCRT64 backup-manager test cleanup fix — 2026-11-05
+
+- Fixed the backup-manager test cleanup failure reported by the maintainer at `std::filesystem::remove_all` (previously asserted at test line 214).
+- The test now explicitly closes the streams that read the preserved autobackup and recovered active save before removing the temporary test directory. This is required on Windows, where open file handles can prevent directory/file deletion; POSIX may allow unlinking open files and therefore did not expose the issue.
+- Cleanup now uses a dedicated `std::error_code` and prints its message if removal fails, so future failures identify the actual filesystem error rather than inheriting or obscuring an earlier error state.
+- The fixture remains excluded by `.gitignore`; no `LICENSE` file is added, as requested by the maintainer.
+- Targeted `backup-manager.exe` was rebuilt and passed with Clang 17/C++20 and strict warnings in the available Linux environment. A full-suite build attempt timed out while compiling `HomeMenuSavePatcher.cpp`; the Windows-specific UCRT64 execution is still pending.

@@ -41,7 +41,6 @@ bool TitlesSorterSession::LoadSave(std::span<const std::uint8_t> bytes, std::str
     hasPlan_ = false;
     previewPage_ = 1;
     errorMessage_.clear();
-    BuildPreviewLabels();
     screen_ = Screen::Settings;
     return true;
 }
@@ -51,7 +50,6 @@ void TitlesSorterSession::SetMetadata(const MetadataCatalog* metadata) noexcept 
         metadata_ = metadata;
         hasPlan_ = false;
     }
-    if (hasModel_) BuildPreviewLabels();
 }
 
 SortOptions& TitlesSorterSession::Options() noexcept { return options_; }
@@ -59,7 +57,10 @@ const SortOptions& TitlesSorterSession::Options() const noexcept { return option
 Screen TitlesSorterSession::CurrentScreen() const noexcept { return screen_; }
 const std::string& TitlesSorterSession::ErrorMessage() const noexcept { return errorMessage_; }
 const SaveModel* TitlesSorterSession::Model() const noexcept { return hasModel_ ? model_.get() : nullptr; }
-const PlanResult* TitlesSorterSession::Plan() const noexcept { return hasPlan_ ? &plan_ : nullptr; }
+const PlanResult* TitlesSorterSession::Plan() const noexcept {
+    return hasPlan_ && plannedMetadata_ == metadata_ && SameOptions(options_, plannedOptions_)
+        ? &plan_ : nullptr;
+}
 
 bool TitlesSorterSession::BeginPreview(std::string& error) {
     error.clear();
@@ -77,7 +78,6 @@ bool TitlesSorterSession::BeginPreview(std::string& error) {
     }
 
     previewPage_ = 1;
-    BuildPreviewLabels();
     if (hasPlan_ && plannedMetadata_ == metadata_ &&
         SameOptions(options_, plannedOptions_)) {
         errorMessage_.clear();
@@ -268,62 +268,5 @@ PreviewPage TitlesSorterSession::GetPreviewPage(std::uint32_t folderId) const {
     return page;
 }
 
-void TitlesSorterSession::BuildPreviewLabels() {
-    labels_.fill({});
-    for (std::size_t i = 0; i < model_->mainSlots.size(); ++i) {
-        const Slot& slot = model_->mainSlots[i];
-        if (!slot.occupied) continue;
-
-        switch (slot.kind) {
-            case ItemKind::Title: {
-                if (metadata_ != nullptr) {
-                    const auto found = metadata_->find(slot.titleId);
-                    if (found != metadata_->end()) {
-                        const TitleMetadata& metadata = found->second;
-                        switch (options_.field) {
-                            case SortField::TitleId: labels_[i] = FormatTitleId(slot.titleId); break;
-                            case SortField::ProductCode: labels_[i] = metadata.productCode; break;
-                            case SortField::ShortName: labels_[i] = metadata.shortName; break;
-                            case SortField::LongName: labels_[i] = metadata.longName; break;
-                        }
-                    }
-                }
-                if (labels_[i].empty()) labels_[i] = FormatTitleId(slot.titleId);
-                break;
-            }
-            case ItemKind::Folder: {
-                if (slot.folderId > 0U && slot.folderId <= model_->folders.size())
-                    labels_[i] = model_->folders[slot.folderId - 1U].name;
-                if (labels_[i].empty()) labels_[i] = "Folder " + std::to_string(slot.folderId);
-                break;
-            }
-            case ItemKind::Disc:
-            case ItemKind::Vwii:
-            case ItemKind::Unknown: {
-                bool resolved = false;
-                if (metadata_ != nullptr && slot.titleId != 0U) {
-                    const auto found = metadata_->find(slot.titleId);
-                    if (found != metadata_->end()) {
-                        const TitleMetadata& metadata = found->second;
-                        switch (options_.field) {
-                            case SortField::TitleId: labels_[i] = FormatTitleId(slot.titleId); break;
-                            case SortField::ProductCode: labels_[i] = metadata.productCode; break;
-                            case SortField::ShortName: labels_[i] = metadata.shortName; break;
-                            case SortField::LongName: labels_[i] = metadata.longName; break;
-                        }
-                        resolved = !labels_[i].empty();
-                    }
-                }
-                if (!resolved) {
-                    if (slot.kind == ItemKind::Disc) labels_[i] = "Disc";
-                    else if (slot.kind == ItemKind::Vwii) labels_[i] = "Wii";
-                    else labels_[i] = "Unknown";
-                }
-                break;
-            }
-            case ItemKind::Empty: break;
-        }
-    }
-}
 
 } // namespace titles_sorter

@@ -41,3 +41,29 @@ Scope: static review of the current source plus host tests. This is not a claim 
 - The renderer no longer decodes a 1300x1200 folder image and creates a temporary scaled SDL surface at startup. It decodes the already reduced PNG directly.
 - With `unknown.png` and the transparent `lock.png` overlay included, the twelve embedded PNGs shrink from 14,289,190 bytes to 654,378 bytes (95.4%) on the current source artwork. The eight folder images are still uploaded as 256x235 textures and `unknown.png` as 256x256, so the final GPU footprint is determined by those runtime dimensions; the savings are in executable size, decode/scale work, and peak temporary CPU memory.
 - The asset preparation script was exercised with Python 3 and Pillow and output dimensions were checked. The renderer also retains extracted WUHB icon bytes in shared memory for the duration of the metadata catalog; actual peak memory on console remains unmeasured. Wii U cross-compilation and hardware rendering still require the user's devkitPro environment and console.
+
+
+## Pre-release source optimization pass — 2026-11-05
+
+- Removed `TitlesSorterSession::BuildPreviewLabels()` and its fixed array of 300 `std::string` objects. Search confirmed the array was never read; visible preview labels are built by `GetPreviewPage()`. This removes redundant label generation and its string storage/allocations on save load, metadata updates and preview generation.
+- `HomeMenuSavePatcher::ApplyAssignments` now uses fixed arrays bounded by `kMainSlotCount` for destination/source validation and empty-slot pairing. It rejects counts above that bound. This removes four short-lived heap containers per invocation.
+- `BuildDryRunPlan` validates the fixed plan arrays in place instead of copying them into temporary vectors and allocating dynamic `vector<bool>` source sets.
+- `HomeMenuSavePatcher` now scopes the source re-parse so its temporary `SaveModel` is destroyed before the patched candidate is reparsed.
+- Apply releases the active-save comparison buffer after validation and the staged readback buffer after byte-for-byte verification. Backup creation releases source and verification buffers once the backup copy has been verified; Restore releases its staged readback buffer before commit. These changes lower peak live save-buffer memory without changing the validation sequence.
+- Removed unused UI state left by the earlier confirmation flow: `confirmationPending`, `restoreSucceeded` and `applySucceeded`, plus unused request members in `UiFrame`. The preview-required result is routed through its dedicated state helper.
+- Clang 17 strict diagnostics exposed an unnecessary lambda capture in `DrawTopBar`; removed it. No UI geometry or presentation was changed.
+
+### Remaining memory/performance observations
+
+- Metadata icon payloads are retained in the catalog through `shared_ptr` and are capped per WUHB file at 2 MiB, but there is no aggregate byte budget across all Homebrew titles referenced by the save. This was not changed because an arbitrary global cap could silently remove artwork; measure peak memory on console before selecting a policy.
+- The renderer bounds text textures to 128 entries and title icon textures to 48 entries. The cache limits bound entry counts, not exact GPU bytes.
+- Sort-key generation still allocates per sortable item. The current maximum is bounded by Home Menu slot counts, and no representative Wii U timing profile is available; no speculative sort-key rewrite was made.
+- No on-console heap profiler or timing benchmark was available. The changes above are allocation/ownership reductions established by source inspection, not claims of measured frame-time or peak-RAM improvements.
+
+
+## Restore autobackup follow-up — 2026-11-05
+
+- Restore now stages and verifies the selected backup before creating the optional pre-Restore autobackup. This preserves the selected content even if the retention pass removes its original file.
+- After staging verification, both in-memory copies of the selected save are released before `CreateBackup` reads/verifies the active save. The staged file remains on disk. After autobackup completes, the staged file is read once more for the final post-install byte comparison.
+- This reduces the overlapping full-save buffers during the autobackup phase from three to two. It is a source-level lifetime/peak-memory improvement; no on-console heap measurement is available.
+- Regression tests cover a selected automatic backup being pruned by retention while Restore still succeeds, and a failed autobackup request aborting Restore without changing the active save or leaving a staging file.

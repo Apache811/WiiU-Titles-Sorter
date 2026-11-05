@@ -60,7 +60,9 @@ bool ReadActiveHomeMenuSave(
     WiiUHomeMenuSaveIdentity identity,
     IReadOnlySaveFileSystem& fileSystem,
     WiiUHomeMenuSaveSnapshot& snapshot,
-    std::string& error) {
+    std::string& error,
+    SaveRecoveryCallback recoveryCallback,
+    void* recoveryContext) {
     error.clear();
 
     // Probe the redirected location before resolving the active path. A hard
@@ -92,6 +94,11 @@ bool ReadActiveHomeMenuSave(
 
     auto location = ResolveHomeMenuSaveLocation(identity, error);
     if (!location.has_value()) return false;
+
+    // Recovery must run against the authoritative path before the read. Never
+    // recover the MLC fallback when the plugin's redirected save is active.
+    if (recoveryCallback != nullptr &&
+        !recoveryCallback(location->activePath, recoveryContext, error)) return false;
 
     std::vector<std::uint8_t> candidate;
     if (!ReadValidatedFile(location->activePath, fileSystem, candidate, error)) {

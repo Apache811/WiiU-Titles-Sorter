@@ -53,6 +53,18 @@ public:
     }
 };
 
+struct RecoveryProbe {
+    std::string path;
+    int calls{};
+};
+
+bool RecordRecovery(const std::string& path, void* context, std::string&) {
+    auto* probe = static_cast<RecoveryProbe*>(context);
+    probe->path = path;
+    ++probe->calls;
+    return true;
+}
+
 WiiUHomeMenuSaveIdentity MakeIdentity() {
     return {0x0005001010040000ULL, 0x12345678U, "WUP12345678901", false};
 }
@@ -93,6 +105,26 @@ void TestPluginSaveTakesPrecedence() {
     assert(snapshot.location.usesPluginRedirect);
     assert(fs.redirectedReads == 1 && fs.mlcReads == 0);
     assert(snapshot.bytes.front() == 0xA5);
+}
+
+void TestRecoveryRunsBeforeReadingTheAuthoritativePath() {
+    auto identity = MakeIdentity();
+    FakeFileSystem fs;
+    std::string error;
+    auto redirectedIdentity = identity;
+    redirectedIdentity.pluginRedirectedSaveExists = true;
+    auto redirectedLocation = ResolveHomeMenuSaveLocation(redirectedIdentity, error);
+    auto mlcLocation = ResolveHomeMenuSaveLocation(identity, error);
+    assert(redirectedLocation && mlcLocation);
+    fs.redirectedPath = *redirectedLocation->pluginRedirectedPath;
+    fs.mlcPath = mlcLocation->mlcPath;
+    fs.redirectedSizeStatus = SaveFileStatus::Success;
+    RecoveryProbe probe;
+    WiiUHomeMenuSaveSnapshot snapshot;
+    assert(ReadActiveHomeMenuSave(identity, fs, snapshot, error, &RecordRecovery, &probe));
+    assert(probe.calls == 1);
+    assert(probe.path == fs.redirectedPath);
+    assert(fs.redirectedReads == 1 && fs.mlcReads == 0);
 }
 
 void TestInvalidPluginSaveNeverFallsBackToMlc() {
@@ -162,6 +194,7 @@ int main() {
     TestUsesMlcWhenRedirectDoesNotExist();
     TestPluginSaveTakesPrecedence();
     TestInvalidPluginSaveNeverFallsBackToMlc();
+    TestRecoveryRunsBeforeReadingTheAuthoritativePath();
     TestPluginReadFailureNeverFallsBack();
     TestCannotAssumeNoRedirectWithoutSerial();
     TestRedirectProbeIoErrorFailsClosed();

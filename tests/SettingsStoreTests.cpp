@@ -20,11 +20,15 @@ int main() {
     assert(options.field == SortField::LongName);
     assert(options.folderPlacement == FolderPlacement::FoldersFirst);
     assert(options.sortFolderContents);
+    assert(options.autoBackup);
+    assert(options.maxAutoBackups == 10U);
 
     options.field = SortField::ProductCode;
     options.folderPlacement = FolderPlacement::MixedAlphabetically;
     options.sortFolderContents = false;
     options.excludedPages = {1U, 3U, 8U};
+    options.autoBackup = false;
+    options.maxAutoBackups = 7U;
     assert(store.SaveIfChanged(path, options, error));
 
     SortOptions loaded;
@@ -34,6 +38,8 @@ int main() {
     assert(loaded.folderPlacement == options.folderPlacement);
     assert(loaded.sortFolderContents == options.sortFolderContents);
     assert(loaded.excludedPages == options.excludedPages);
+    assert(loaded.autoBackup == options.autoBackup);
+    assert(loaded.maxAutoBackups == options.maxAutoBackups);
     assert(secondStore.SaveIfChanged(path, loaded, error)); // No-op when unchanged.
 
     // Recover a completed settings file if power is lost after the old file
@@ -44,6 +50,27 @@ int main() {
     assert(recoveryStore.Load(path, recovered, error));
     assert(recovered.field == options.field);
     assert(recovered.excludedPages == options.excludedPages);
+
+    // Version 1 settings remain readable and receive v2 backup defaults.
+    {
+        std::FILE* legacy = std::fopen(path, "wb");
+        assert(legacy != nullptr);
+        const char legacyContent[] =
+            "version=1\n"
+            "sort_field=2\n"
+            "folder_placement=1\n"
+            "sort_folder_contents=1\n"
+            "sort_folders_by_contents=0\n"
+            "excluded_pages=\n";
+        assert(std::fwrite(legacyContent, 1U, sizeof(legacyContent) - 1U, legacy) ==
+               sizeof(legacyContent) - 1U);
+        assert(std::fclose(legacy) == 0);
+    }
+    TitlesSorterSettingsStore legacyStore;
+    SortOptions legacyOptions;
+    assert(legacyStore.Load(path, legacyOptions, error));
+    assert(legacyOptions.autoBackup);
+    assert(legacyOptions.maxAutoBackups == 10U);
 
     std::remove(path);
     std::remove("titles_sorter_settings_test.ini.tmp");

@@ -8,23 +8,39 @@ The target entry point is `src/platform/wiiu/main.cpp`.
 2. Initialize Mocha and attempt the optional MLC mount; initialize ACP, SDL2, SDL_ttf, the SDL window/renderer and the embedded font renderer.
 3. If a required platform or renderer component cannot initialize, log the critical error, release already-initialized services and return `-1`.
 4. Once the required components are ready, enter exactly one application-lifetime `while (WHBProcIsRunning())` loop.
-5. Save acquisition, incremental metadata loading, startup-error presentation and interactive UI are phases handled by that loop. There are no nested application-lifecycle loops.
-6. Save acquisition or metadata-loading failures are non-critical to the process lifecycle: the loop renders an error screen and continues polling input until HOME requests exit or ProcUI requests shutdown.
+5. Save acquisition, incremental metadata loading, startup-error presentation and interactive UI are phases handled by that loop. Apply/Restore result acknowledgement (A), after either success or failure, returns to the same loop and re-enters save acquisition; no nested application-lifecycle loop is created.
+6. Save acquisition or metadata-loading failures are non-critical to process lifecycle: the loop renders an error screen and continues polling input until HOME requests exit or ProcUI requests shutdown.
 7. After `coordinator.Begin()` has created the session, load persisted settings into that session. Do not load them before `Begin()`: it resets the coordinator session.
 8. The coordinator processes at most one native title metadata item or one Homebrew metadata item per loading frame.
-9. On shutdown, finalize ACP, release Mocha/storage, shut down SDL resources, VPAD, ProcUI and UDP logging.
+9. Before parsing the active save, the platform adapter attempts interrupted Restore recovery followed by interrupted Apply recovery.
+10. On shutdown, finalize ACP, release Mocha/storage, shut down SDL resources, VPAD, ProcUI and UDP logging.
 
-The single loop makes lifecycle ownership explicit, but does not by itself prove or guarantee that the HOME → Continue black-screen issue is fixed. The SDL renderer's foreground/background resource behaviour still requires testing on the console.
+The single loop makes lifecycle ownership explicit, but does not by itself prove or guarantee that the HOME → Continue black-screen issue is fixed. SDL renderer foreground/background behaviour still requires testing on the console.
 
-## Safety properties
+## UI navigation and actions
 
-- The application only opens the Home Menu save for reading. No write, rename, truncate, serializer, backup or restore path is called.
-- A redirected Homebrew-on-Menu save remains authoritative according to the save reader. An invalid redirected save is not replaced with a fallback MLC copy.
-- The preview is generated in memory. Its slot/page mapping is still explicitly experimental and must not be used to write the save.
-- A successfully generated preview is retained while the complete set of sort options and the metadata-catalog reference remain unchanged. Returning to Settings does not discard it; the next ZR returns directly to the cached preview. Changing an option invalidates the cached result, so the next ZR generates a fresh plan.
+- The top-bar order is OPTIONS → PREVIEW → APPLY.
+- From OPTIONS, ZL opens APPLY and ZR generates PREVIEW immediately; no A confirmation is required to enter Preview.
+- From PREVIEW, ZL returns to OPTIONS and ZR opens APPLY.
+- From APPLY, ZL generates PREVIEW immediately and ZR returns to OPTIONS.
+- OPTIONS retains the v0.5 sorting controls, Excluded Pages keyboard field and bottom-bar interaction.
+- PREVIEW retains its v0.5 grid, L/R page navigation and A/B folder navigation.
+- APPLY exposes Autobackup, maximum automatic backup count, Create Backup, Restore Backup and Apply the Previewed Layout.
+- Create Backup runs immediately on A and then displays a result screen. Apply requires an A/B decision. Restore requires selecting a backup and an A/B decision; B cancels. Operation-result screens accept A only.
+- The Wii U software keyboard edits the maximum automatic backup count. Invalid values leave the previous valid value unchanged.
+- Settings are persisted separately from the Home Menu save. The maximum automatic backup count is currently constrained to 1–100.
+
+## Save mutation and recovery
+
+- Manual backup copies the active save byte-for-byte into `fs:/vol/external01/wiiu/apps/TitlesSorter/backups`.
+- Apply validates the active save against the source used by the preview, builds and validates the candidate, optionally creates an autobackup, stages the candidate beside the active save, and uses a recovery rename sequence before commit.
+- Restore validates and stages the selected backup before retention can run. When Autobackup is enabled, it then creates a byte-for-byte automatic backup of the currently active save; if that backup cannot be completed, Restore is aborted and the staged candidate is removed. Restore then uses a recovery rename sequence.
+- After the user acknowledges an Apply or Restore result with A, the application re-enters save acquisition and reloads the session and metadata, regardless of operation success or failure. B and other inputs do not acknowledge result screens. Interrupted transaction recovery runs before the next parse.
+- These operations are now wired to the UI, but the save format and page/slot mapping remain experimental. Do not use Apply on the only copy of valuable save data. Keep an independent console/SD backup until format and filesystem behaviour have been verified on hardware.
 
 ## Validation status
 
-- The revised Wii U source has not been compiled in this environment because the devkitPPC cross-compiler is unavailable.
-- Host tests could not run here because the required MSYS2 UCRT64 compiler (`/ucrt64/bin/g++.exe`) is unavailable.
-- The HOME → Continue lifecycle must be tested on the actual console after rebuilding with the user's devkitPro/WUT toolchain.
+- The complete 13-executable host suite passed for the Restore autobackup follow-up using GCC 14.2.0, C++20 and strict warnings in the current Linux host environment. This is not the user's MSYS2 UCRT64 environment; rerun `make tests` there as the final platform-specific host check. See `TEST_RESULTS.md`.
+- The Wii U target source has not been compiled in this environment because devkitPPC/WUT/Mocha are unavailable here.
+- `fflush`/close and rename behaviour on the Wii U storage stack, including power-loss durability, has not been verified on hardware.
+- HOME → Continue, manual backup, Restore, Apply and post-operation reload must be tested on the actual console after a target build. Apply should remain a deliberate test only after an independent backup exists.

@@ -151,6 +151,8 @@ struct SortOptions {
     bool sortFolderContents{true};
     bool sortFoldersByContents{false}; // Reserved; not implemented because recursive/nested semantics are unproven.
     std::vector<std::uint32_t> excludedPages; // 1-based page numbers.
+    bool autoBackup{true};
+    std::uint32_t maxAutoBackups{10U};
 };
 
 struct SlotAssignment {

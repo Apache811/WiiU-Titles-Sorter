@@ -16,6 +16,8 @@ CORE_SOURCES := \
 	src/core/TitlesSorterSettingsStore.cpp \
 	src/core/WiiUHomeMenuSaveLocator.cpp \
 	src/core/WiiUHomeMenuSaveReader.cpp \
+	src/core/HomeMenuSaveBackupManager.cpp \
+	src/core/HomeMenuSavePatcher.cpp \
 	src/ui/TitlesSorterUI.cpp
 CORE_OBJECTS := $(patsubst %.cpp,$(HOST_BUILD)/obj/%.cpp.o,$(CORE_SOURCES))
 
@@ -38,14 +40,17 @@ tests: normalize-timestamps check-toolchain \
 	$(HOST_BUILD)/wiiu-input.exe \
 	$(HOST_BUILD)/save-locator.exe \
 	$(HOST_BUILD)/save-reader.exe \
-	$(HOST_BUILD)/settings.exe
+	$(HOST_BUILD)/settings.exe \
+	$(HOST_BUILD)/backup-manager.exe \
+	$(HOST_BUILD)/save-patcher.exe \
+	$(HOST_BUILD)/save-apply-transaction.exe
 	@set -e; \
-	for test in core session wiiu-provider wiiu-coordinator ui renderer wiiu-input save-locator save-reader settings; do \
+	for test in core session wiiu-provider wiiu-coordinator ui renderer wiiu-input save-locator save-reader settings backup-manager save-patcher save-apply-transaction; do \
 		echo; echo "[TEST] $$test"; \
 		if test "$$test" = core; then "$(HOST_BUILD)/$$test.exe" tests/fixtures/sample_menu_save.dat; \
 		else "$(HOST_BUILD)/$$test.exe"; fi; \
 	done; \
-	echo; echo "All 10 test executables passed."
+	echo; echo "All 13 test executables passed."
 
 check-toolchain:
 	@command -v "$(HOST_CXX)" >/dev/null 2>&1 || { \
@@ -84,10 +89,19 @@ rebuild: clean
 clean:
 	@rm -rf build/tests
 
+$(HOST_BUILD)/backup-manager.exe: $(HOST_BUILD)/obj/tests/HomeMenuSaveBackupManagerTests.cpp.o $(HOST_BUILD)/obj/src/core/HomeMenuSaveBackupManager.cpp.o $(HOST_BUILD)/obj/src/core/TitlesSorterCore.cpp.o
+	$(HOST_CXX) $(CXXFLAGS) $(WARNINGS) $^ -o $@
+
 $(HOST_BUILD)/settings.exe: $(HOST_BUILD)/obj/tests/SettingsStoreTests.cpp.o $(HOST_BUILD)/obj/src/core/TitlesSorterSettingsStore.cpp.o $(HOST_BUILD)/obj/src/core/TitlesSorterCore.cpp.o
 	$(HOST_CXX) $(CXXFLAGS) $(WARNINGS) $^ -o $@
 
 # Standalone, read-only save-file planner utility (not part of the Wii U binary).
 DRYRUN_CORE_OBJECTS := $(filter-out $(HOST_BUILD)/obj/src/ui/TitlesSorterUI.cpp.o,$(CORE_OBJECTS))
 $(HOST_BUILD)/titles_sorter_dryrun.exe: $(HOST_BUILD)/obj/src/tools/dryrun_main.cpp.o $(DRYRUN_CORE_OBJECTS)
+	$(HOST_CXX) $(CXXFLAGS) $(WARNINGS) $^ -o $@
+
+$(HOST_BUILD)/save-patcher.exe: $(HOST_BUILD)/obj/tests/HomeMenuSavePatcherTests.cpp.o $(HOST_BUILD)/obj/src/core/HomeMenuSavePatcher.cpp.o $(HOST_BUILD)/obj/src/core/TitlesSorterCore.cpp.o
+	$(HOST_CXX) $(CXXFLAGS) $(WARNINGS) $^ -o $@
+
+$(HOST_BUILD)/save-apply-transaction.exe: $(HOST_BUILD)/obj/tests/HomeMenuSaveApplyTransactionTests.cpp.o $(HOST_BUILD)/obj/src/core/HomeMenuSaveApplyTransaction.cpp.o $(HOST_BUILD)/obj/src/core/HomeMenuSavePatcher.cpp.o $(HOST_BUILD)/obj/src/core/HomeMenuSaveBackupManager.cpp.o $(HOST_BUILD)/obj/src/core/TitlesSorterCore.cpp.o
 	$(HOST_CXX) $(CXXFLAGS) $(WARNINGS) $^ -o $@

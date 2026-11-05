@@ -37,13 +37,56 @@ int main() {
     assert(GetSdlMockStats().presentCalls == 1U);
     assert(GetSdlMockStats().copyCalls > 0U);
 
+    frame.section = UiSection::Apply;
+    frame.applyRows[0] = {"Autobackup", "Enabled", true, true};
+    frame.applyRows[1] = {"Max Number of Autobackups to Keep", "10", false, true};
+    frame.applyRows[2] = {"Create Backup", "Create a manual backup", false, true};
+    frame.applyRows[3] = {"Restore Backup", "Select a backup file", false, true};
+    frame.applyRows[4] = {"Apply the Previewed Layout", "Preview required", false, false};
+    ui.Draw(frame, 250);
+    assert(GetSdlMockStats().presentCalls == 2U);
+
+    frame.showingBackupList = true;
+    frame.backupNames = {"/backups/autobackup_2026-11-05_10-00-00.dat",
+                         "/backups/backup_2026-11-05_09-00-00.dat"};
+    frame.selectedBackup = 1U;
+    ui.Draw(frame, 500);
+    assert(GetSdlMockStats().presentCalls == 3U);
+    frame.showingBackupList = false;
+    frame.applyConfirmation = ApplyConfirmation::BackupResult;
+    frame.message = "Backup Completed !!!";
+    frame.dialogDetail = "/backups/backup_2026-11-05_10-00-00.dat";
+    frame.footerMode = UiFooterMode::OperationResult;
+    ui.Draw(frame, 525);
+    assert(GetSdlMockStats().presentCalls == 4U);
+    frame.applyConfirmation = ApplyConfirmation::ApplyLayoutDecision;
+    frame.footerMode = UiFooterMode::Decision;
+    ui.Draw(frame, 535);
+    assert(GetSdlMockStats().presentCalls == 5U);
+    frame.applyConfirmation = ApplyConfirmation::ApplyResult;
+    frame.message = "Layout Applied !!!";
+    frame.dialogDetail = "Autobackup created: /backups/autobackup_test.dat";
+    frame.footerMode = UiFooterMode::OperationResult;
+    ui.Draw(frame, 540);
+    assert(GetSdlMockStats().presentCalls == 6U);
+    frame.applyConfirmation = ApplyConfirmation::RestoreDecision;
+    frame.dialogDetail = "/backups/backup_2026-11-05_10-00-00.dat";
+    ui.Draw(frame, 550);
+    assert(GetSdlMockStats().presentCalls == 7U);
+    frame.applyConfirmation = ApplyConfirmation::PreviewRequired;
+    frame.message = "Generate a Preview before applying a layout.";
+    frame.dialogDetail.clear();
+    frame.footerMode = UiFooterMode::OperationResult;
+    ui.Draw(frame, 560);
+    assert(GetSdlMockStats().presentCalls == 8U);
+
     frame.screen = Screen::LoadingData;
     ui.Draw(frame, 625);
-    assert(GetSdlMockStats().presentCalls == 2U);
+    assert(GetSdlMockStats().presentCalls == 9U);
 
     frame.screen = Screen::GeneratingPreview;
     ui.Draw(frame, 1250);
-    assert(GetSdlMockStats().presentCalls == 3U);
+    assert(GetSdlMockStats().presentCalls == 10U);
 
     frame.screen = Screen::Preview;
     frame.preview.pageNumber = 2;
@@ -68,7 +111,7 @@ int main() {
     frame.preview.slots[1].iconData = tga;
     const std::size_t texturesBeforePreview = GetSdlMockStats().createdTextures;
     ui.Draw(frame, 2250);
-    assert(GetSdlMockStats().presentCalls == 4U);
+    assert(GetSdlMockStats().presentCalls == 11U);
     assert(GetSdlMockStats().createdTextures > texturesBeforePreview);
 
     ui.Shutdown();

@@ -37,10 +37,15 @@ struct WiiUHomeMenuSaveSnapshot {
 
 // Reads the active account's save. If the plugin redirected save exists, it is
 // authoritative: any size/read error is fatal and MLC fallback is forbidden.
+using SaveRecoveryCallback = bool (*)(const std::string& activePath,
+                                      void* context, std::string& error);
+
 [[nodiscard]] bool ReadActiveHomeMenuSave(
     WiiUHomeMenuSaveIdentity identity,
     IReadOnlySaveFileSystem& fileSystem,
     WiiUHomeMenuSaveSnapshot& snapshot,
-    std::string& error);
+    std::string& error,
+    SaveRecoveryCallback recoveryCallback = nullptr,
+    void* recoveryContext = nullptr);
 
 } // namespace titles_sorter

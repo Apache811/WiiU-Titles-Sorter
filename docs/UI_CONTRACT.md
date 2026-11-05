@@ -1,40 +1,55 @@
-# Titles Sorter UI contract — v0.6
+# Titles Sorter UI contract — v1.0.0 candidate
 
-This release implements the platform-independent UI controller and frame model. It does **not** yet contain SDL drawing code or a Wii U executable. The renderer must consume `UiFrame`; VPAD polling must translate controller buttons to `UiInput`.
+This document describes the current controller, frame model and SDL renderer contract. The Wii U frontend maps VPAD input to `UiInput`; the controller produces `UiFrame`; the renderer presents that frame.
 
-## Visual language
+## Shared visual language
 
-Preserve the Titles Info composition:
-- 1920×1080 logical coordinate space (renderer may scale to TV output).
-- Pale blue-grey background: RGB(239, 244, 249).
-- Blue gradient top/bottom bars: RGB(27, 139, 224) to RGB(0, 91, 174).
-- White rounded cards, DejaVu Sans.
-- Top bar contains the application title only; no ALL/NAND/USB filters.
-- Bottom bar shows only actions available on the current screen.
+- 1920×1080 logical coordinate space, scaled by SDL.
+- Pale blue-grey background (RGB 239, 244, 249), blue gradient top/bottom bars, white rounded cards and embedded DejaVu Sans.
+- Top-bar order: OPTIONS → PREVIEW → APPLY. The ZL/ZR navigation cycle is explicit and fixed:
 
-## Settings rows
+  | Current section | ZL | ZR |
+  |---|---|---|
+  | OPTIONS | APPLY | PREVIEW |
+  | PREVIEW | OPTIONS | APPLY |
+  | APPLY | PREVIEW | OPTIONS |
 
-1. Sort By — Title ID, Product Code, Long Name, Short Name, Publisher, Folder Name.
-2. Folder Placement — Folders First / Mixed Alphabetically.
-3. Sort Folder Contents — ON/OFF; immediate contents only.
-4. Excluded Pages — expression such as `1-3,6,8`; empty or `None` means no exclusions.
+- HOME remains owned by WHB ProcUI and exits through the application lifecycle.
+- Decision screens show HOME/Exit and A/Confirm plus B/Cancel. Operation-result screens show HOME/Exit and A/Confirm; B is ignored.
 
-D-pad Up/Down changes focus. Left/Right changes enum/boolean settings. A toggles boolean rows or requests text entry for Excluded Pages. A platform text-entry widget calls `SetExcludedPagesExpression`; invalid input is rejected without changing the active options. ZR begins preview generation. HOME requests exit.
+## OPTIONS
 
-## Generating Preview
+- Sort By: Title ID, Product Code, Long Name, Short Name.
+- Folder Placement: Folders First / Mixed Alphabetically.
+- Sort Folder Contents: ON/OFF.
+- Excluded Pages: parsed expression edited through the Wii U software keyboard.
+- Preserve the established OPTIONS layout, interaction and `Edit Option` bottom-bar action.
 
-The renderer displays “Generating Preview”. The main loop calls `TitlesSorterUiController::Update()` exactly once per frame. The session advances from GeneratingPreview to Preview or Error.
+## PREVIEW
 
-## Preview
+- Entering PREVIEW from OPTIONS or APPLY starts generation immediately; A is not required.
+- Render the experimental 5×3 grid from `UiFrame::preview`.
+- L/R changes pages with wraparound. A enters a folder; B returns to the previous Home Menu page/selection. ZL/ZR navigate to the adjacent sections as listed above.
+- The generating screen is shown before the generated preview is presented.
 
-Render `UiFrame::preview` as the experimental 5×3 page grid, using neutral placeholder artwork until icon paths have been verified. L/R changes page; B returns to Settings; HOME requests exit.
+## APPLY
 
-Preview is strictly derived from the dry-run plan. No save-writing operation is exposed by the UI controller.
+Five full-width controls in this order: Autobackup, Max Number of Autobackups to Keep, Create Backup, Restore Backup, Apply the Previewed Layout. The established control geometry and main APPLY footer are fixed for the v1.0 UI.
+
+- Autobackup is toggled with D-pad Left/Right. The maximum automatic-backup count is edited with the Wii U software keyboard and accepts 1–100.
+- Create Backup executes immediately on A; it does not ask for a second confirmation. Its result screen reports success/failure and the path or error.
+- Restore opens the backup selector. Manual and automatic backups are interleaved newest-first by timestamp. D-pad Up/Down selects; A opens the decision screen; A confirms; B returns to the selector. When Autobackup is enabled, the current active save is backed up before replacement. The result screen reports the safety-backup path when one was created, including when a later Restore step fails.
+- Apply requires a current preview and opens an A/B decision screen. If no current preview exists, `Generate a Preview before applying a layout.` is shown in the same operation-result presentation used by Create Backup.
+- Backup, Restore and Apply result screens use consistent typography, positioning and footer behaviour. Result screens accept A only.
+- After either a successful or failed Restore/Apply, the result remains visible until A is pressed. Only then does the application reload the active Home Menu save and installed-title metadata. B and other inputs do not trigger the reload.
+- Apply reports `Layout Applied !!!` or `Apply Failed !!!`. If an autobackup was created, its path is included in the detail text, including when a later Apply stage fails.
+
+## Loading and error messages
+
+- The loading screen describes its work as reading the Home Menu save and installed-title metadata; it is not a save-progress indicator and does not persist settings.
+- Preview generation has its own `Generating Preview` screen.
+- Startup/load errors remain on the error screen until the user returns or exits through HOME/ProcUI.
 
 ## Platform boundary
 
-`TitlesSorterUiController` contains no SDL/WUT dependencies. The Wii U frontend is responsible for:
-- VPAD input polling and mapping to `UiInput`.
-- SDL2/SDL_ttf drawing, text texture caching and scaling.
-- Opening the system/software keyboard or a custom on-screen keyboard for excluded-page input.
-- Lazy icon loading only after title icon path resolution is verified.
+`TitlesSorterUiController` remains independent of SDL/WUT. The Wii U frontend owns VPAD polling, software-keyboard integration, save-platform operations and lifecycle transitions. `TitlesSorterRenderer` owns SDL textures/fonts and bounded text/icon caches.

@@ -1,46 +1,41 @@
-# Wii U read-only save platform adapter
+# Wii U Home Menu save platform adapter
 
-`src/platform/wiiu/WiiUHomeMenuSavePlatform.cpp` is the hardware-facing adapter for
-`WiiUHomeMenuSaveReader`. It is deliberately excluded from normal desktop builds.
+`src/platform/wiiu/WiiUHomeMenuSavePlatform.cpp` is the hardware-facing adapter for `WiiUHomeMenuSaveReader` and the backup/apply core services.
 
 ## Startup contract
 
 The application must call `WHBProcInit()` before `WiiUHomeMenuSavePlatform::ReadActiveSave()`.
-The adapter relies on the Homebrew environment's `fs:/vol/external01` mount for
-the Homebrew On Wii U Menu plugin cache. It mounts only MLC through Mocha; USB
-is not mounted or accessed.
+The adapter relies on the Homebrew environment's `fs:/vol/external01` mount for the Homebrew On Wii U Menu plugin cache and application data. It mounts only MLC through Mocha; USB is not mounted or accessed.
 
 ## Acquisition sequence
 
-1. Resolve the Wii U Menu title ID from `sysapp.rpl` using
-   `_SYSGetSystemApplicationTitleId(0)`.
+1. Resolve the Wii U Menu title ID from `sysapp.rpl` using `_SYSGetSystemApplicationTitleId(0)`.
 2. Initialize ACT, read the active slot and its persistent ID, then finalize ACT.
-3. Read `code_id` and `serial_id` through MCP. The MCP settings buffer is
-   explicitly 0x40-aligned, matching the working Menu Sort Aroma integration.
+3. Read `code_id` and `serial_id` through MCP. The MCP settings buffer is explicitly 0x40-aligned, matching the working Menu Sort Aroma integration.
 4. Initialize Mocha and mount `storage_mlc` at `/vol/storage_mlc01`.
-5. Probe the plugin redirected path first, then use the portable reader's
-   fail-closed precedence policy.
-6. Open the selected file with `rb` only, verify its size and read exactly
-   `0x1FC44` bytes. No write-capable file mode is used.
-7. Unmount MLC when the adapter returns.
+5. Probe the plugin redirected path first, then use the portable reader's fail-closed precedence policy.
+6. Recover an interrupted Restore, then an interrupted Apply, on the resolved authoritative path before parsing it.
+7. Read exactly `0x1FC44` bytes and reject unsupported sizes.
+8. Keep MLC mounted for the application lifetime (the owner is `main()`).
 
 ## Build integration
 
-The adapter is included in the Wii U source set owned by `makeapp.mk`. The
-current project snapshot does not yet have the Wii U application entry point,
-so `make` deliberately stops before attempting to link an incomplete RPX/WUHB.
-Once the lifecycle/main loop and WUHB assets are added, build it from the MSYS2
-shell configured with devkitPPC, WUT and Mocha using `make`.
+The adapter and application entry point are included in the Wii U source set owned by `makeapp.mk`. The build discovers `.cpp` files under `src/core`, `src/ui`, `src/ui/sdl` and `src/platform/wiiu`.
+
+Build from the configured MSYS2 shell with devkitPPC, WUT, Mocha, SDL2 ports and libwuhbutils installed. The main `Makefile` was not changed as part of the UI integration.
+
+## Explicit write operations
+
+The platform adapter exposes methods for manual backup, backup enumeration, Restore and Apply. Backups are placed under `fs:/vol/external01/wiiu/apps/TitlesSorter/backups`, in the same application folder as `settings.ini`.
+
+- Manual backup copies the current active save byte-for-byte.
+- Apply uses the active path selected by the save locator and the current preview plan. Autobackup is enabled by default and retention defaults to 10; only old autobackups are deleted.
+- When Autobackup is enabled, Restore first stages and verifies the selected backup, then creates a byte-for-byte automatic backup of the currently active save. Restore is aborted if the safety autobackup cannot be completed. When disabled, Restore proceeds without creating an automatic backup.
+- Apply and Restore use staged replacement and recovery files. Startup checks those recovery files before parsing the save.
+- The UI now invokes these methods through explicit confirmation actions and reloads the session after the user acknowledges either a successful or failed Apply/Restore result with A.
 
 ## Important verification boundary
 
-The platform source was authored against the API usage in the supplied,
-working `menu_sort-aroma-main` reference source (ACT, MCP, Mocha and dynamic
-`sysapp.rpl` lookup). This development environment does not contain the Wii U
-SDK headers, libraries, or `powerpc-eabi-g++`; therefore this source has **not**
-been compiled against the actual installed WUT/Mocha versions and has not been
-run on hardware. The portable reader and all host tests are independently
-compiled and tested. The first devkitPPC build is the next required validation.
+The platform source was authored against API usage in the supplied Menu Sort Aroma reference source (ACT, MCP, Mocha and dynamic `sysapp.rpl` lookup). This environment does not contain the Wii U SDK headers, libraries or `powerpc-eabi-g++`; therefore this source has **not** been compiled against the actual installed WUT/Mocha versions and has not been run on hardware.
 
-No save parser is invoked here, and no save file is created, changed, truncated,
-renamed, deleted, or copied. This adapter is strictly read-only.
+The binary save format and page/slot mapping remain experimental. Do not treat a successful host test as proof that applying a layout is safe on a real console. Keep an independent backup before testing write operations.

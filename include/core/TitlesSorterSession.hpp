@@ -70,8 +70,6 @@ public:
     [[nodiscard]] std::string FolderName(std::uint32_t folderId) const;
 
 private:
-    void BuildPreviewLabels();
-
     Screen screen_{Screen::Settings};
     SortOptions options_{};
     std::unique_ptr<SaveModel> model_;
@@ -83,7 +81,6 @@ private:
     const MetadataCatalog* plannedMetadata_{};
     std::uint32_t previewPage_{1};
     std::string errorMessage_;
-    std::array<std::string, kMainSlotCount> labels_{};
 };
 
 } // namespace titles_sorter

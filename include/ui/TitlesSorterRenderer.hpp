@@ -89,9 +89,10 @@ private:
                   int maxWidth = 0);
     int DrawGlyph(const char* glyph, int x, int centerY, int size, SDL_Color color);
     void DrawBackground();
-    void DrawTopBar(bool previewActive);
-    void DrawBottomBar(const std::string& footer);
+    void DrawTopBar(const UiFrame& frame);
+    void DrawBottomBar(const std::string& footer, UiFooterMode mode = UiFooterMode::Standard);
     void DrawSettings(const UiFrame& frame);
+    void DrawApply(const UiFrame& frame);
     void DrawLoading(std::uint32_t elapsedMilliseconds);
     void DrawGenerating(std::uint32_t elapsedMilliseconds);
     void DrawPreview(const UiFrame& frame);

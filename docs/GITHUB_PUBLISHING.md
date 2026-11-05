@@ -1,6 +1,6 @@
 # Publishing Titles Sorter to a new GitHub repository
 
-These instructions create a new repository and push the local project to it. The first repository should remain **Private** until the sample-save fixture has been replaced and the repository has passed the privacy review in `RELEASE_CHECKLIST.md`.
+These instructions create a new repository and push the local project to it. Choose repository visibility according to the maintainer’s release plan, and complete the privacy review in `RELEASE_CHECKLIST.md` before pushing.
 
 ## 1. Create the repository on GitHub
 
@@ -19,7 +19,7 @@ Extract the reviewed project ZIP into a normal development folder, for example:
 D:\Projects\WiiU\TitlesSorter\
 ```
 
-Open an MSYS2 terminal in the project root (the folder containing `Makefile` and `README.md`). Before adding files, complete the privacy review and remove/replace the development save fixture as described in `RELEASE_CHECKLIST.md`. Do not push the current user-derived fixture.
+Open an MSYS2 terminal in the project root (the folder containing `Makefile` and `README.md`). Before adding files, complete the privacy review. The local save fixture is excluded by `.gitignore`; verify that it is ignored and is not staged. Keep the local fixture available if you intend to run the core integration test.
 
 Check the files that Git would include:
 
@@ -97,5 +97,5 @@ For the next release, update the version/changelog, complete the relevant checks
 
 - Do not run `git add` on personal save dumps or local build outputs.
 - Never commit authentication tokens, passwords, private keys, or personal console dumps.
-- A public GitHub repository is not automatically licensed for reuse. Add an explicit `LICENSE` before inviting reuse or calling the project open source.
+- No `LICENSE` file is included by maintainer decision. Do not describe the project as open source or imply that reuse rights are granted.
 - GitHub repository visibility can be changed later in repository Settings, but do so only after the privacy review is complete.

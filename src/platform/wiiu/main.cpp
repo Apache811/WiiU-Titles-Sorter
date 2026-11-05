@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -211,6 +212,21 @@ int main(int, char**) {
     else Log("Native Wii U software keyboard initialized.");
     titles_sorter::WiiUHomeMenuSavePlatform savePlatform;
     titles_sorter::WiiUHomeMenuSaveSnapshot snapshot;
+    bool keyboardForMaxAutoBackups = false;
+    const auto refreshBackupList = [&]() {
+        std::vector<titles_sorter::SaveBackupEntry> entries;
+        std::string backupError;
+        if (!savePlatform.ListBackups(entries, backupError)) {
+            TitleSorterLogf("Backup", "Unable to list backups: %s", backupError.c_str());
+            ui.SetBackups({});
+            return;
+        }
+        std::vector<std::string> paths;
+        paths.reserve(entries.size());
+        for (const auto& entry : entries)
+            paths.emplace_back(std::string(titles_sorter::WiiUHomeMenuSavePlatform::BackupDirectory()) + "/" + entry.fileName);
+        ui.SetBackups(paths);
+    };
 
     titles_sorter::UiFrame loadingFrame{};
     loadingFrame.screen = titles_sorter::Screen::LoadingData;
@@ -244,6 +260,7 @@ int main(int, char**) {
                     Log("Settings loaded (or defaults selected because no settings file exists).");
                 }
 
+                refreshBackupList();
                 if (coordinator.IsReady()) {
                     Log("Startup complete. Catalog is ready.");
                     phase = StartupPhase::Ready;
@@ -289,8 +306,15 @@ int main(int, char**) {
             bool confirmed = false;
             std::string keyboardResult;
             if (searchKeyboard.ConsumeResult(confirmed, keyboardResult)) {
-                if (confirmed) {
-                    std::string validationError;
+                std::string validationError;
+                if (keyboardForMaxAutoBackups) {
+                    keyboardForMaxAutoBackups = false;
+                    if (confirmed && !ui.SetMaxAutoBackups(keyboardResult, validationError))
+                        ui.SetOperationMessage(validationError);
+                    else if (confirmed && !settingsStore.SaveIfChanged(kSettingsPath, coordinator.Session().Options(), validationError))
+                        ui.SetOperationMessage(validationError);
+                    else if (!confirmed) ui.SetOperationMessage("Maximum autobackup count unchanged.");
+                } else if (confirmed) {
                     if (!ui.SetExcludedPagesExpression(keyboardResult, validationError))
                         TitleSorterLogf("UI", "Excluded Pages rejected: %s", validationError.c_str());
                     else {
@@ -335,6 +359,57 @@ int main(int, char**) {
                 Log("Wii U software keyboard requested for Excluded Pages.");
             }
         }
+        if (ui.ConsumeAutoBackupInputRequest()) {
+            const std::string initial = std::to_string(coordinator.Session().Options().maxAutoBackups);
+            if (!searchKeyboard.Request(initial, "Enter a value from 1 to 100")) {
+                ui.CancelAutoBackupInputRequest();
+                ui.SetOperationMessage("Unable to open the Wii U software keyboard.");
+            } else keyboardForMaxAutoBackups = true;
+        }
+
+        if (ui.ConsumeManualBackupRequest()) {
+            std::string createdPath;
+            if (savePlatform.CreateManualBackup(snapshot, createdPath, error)) {
+                ui.SetBackupResult(true, createdPath);
+                refreshBackupList();
+            } else ui.SetBackupResult(false, error);
+        }
+        std::string requestedBackup;
+        if (ui.ConsumeRestoreRequest(requestedBackup)) {
+            std::string automaticBackupPath;
+            const auto& options = coordinator.Session().Options();
+            const bool restored = savePlatform.RestoreBackup(
+                snapshot, requestedBackup, options.autoBackup,
+                options.maxAutoBackups, automaticBackupPath, error);
+            std::string restoreDetail;
+            if (!automaticBackupPath.empty())
+                restoreDetail = "Autobackup created: " + automaticBackupPath;
+            if (!restored) {
+                if (!restoreDetail.empty()) restoreDetail += "\n";
+                restoreDetail += error;
+            }
+            if (!automaticBackupPath.empty()) refreshBackupList();
+            ui.SetRestoreResult(restored, std::move(restoreDetail));
+        }
+        if (ui.ConsumeApplyRequest()) {
+            const titles_sorter::SaveModel* model = coordinator.Session().Model();
+            const titles_sorter::PlanResult* plan = coordinator.Session().Plan();
+            if (model == nullptr || plan == nullptr) ui.SetOperationMessage("A valid preview is required before Apply.");
+            else {
+                const auto result = savePlatform.ApplyPreview(snapshot, *model, *plan, coordinator.Session().Options());
+                if (result.backupCreated) refreshBackupList();
+                std::string applyDetail;
+                if (result.backupCreated)
+                    applyDetail = "Autobackup created: " + result.backupPath;
+                if (!result.applied) {
+                    if (!applyDetail.empty()) applyDetail += "\n";
+                    applyDetail += result.error.empty() ? "The layout could not be applied." : result.error;
+                }
+                ui.SetApplyResult(result.applied, std::move(applyDetail));
+            }
+        }
+        if (ui.ConsumeSessionReloadRequest())
+            phase = StartupPhase::ReadSave;
         renderer.Draw(ui.BuildFrame(), SDL_GetTicks());
         SDL_Delay(1);
     }

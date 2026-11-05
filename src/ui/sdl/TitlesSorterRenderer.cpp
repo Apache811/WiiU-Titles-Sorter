@@ -490,7 +490,7 @@ void TitlesSorterRenderer::DrawBackground() {
     SDL_RenderClear(renderer_);
 }
 
-void TitlesSorterRenderer::DrawTopBar(bool previewActive) {
+void TitlesSorterRenderer::DrawTopBar(const UiFrame& frame) {
     DrawGradient({0, 0, LogicalWidth, kTopBarHeight}, UiPalette::TopBarStart, UiPalette::TopBarEnd);
     DrawText("Titles Sorter", 64, 39, 54, UiPalette::White);
 
@@ -500,8 +500,10 @@ void TitlesSorterRenderer::DrawTopBar(bool previewActive) {
     constexpr int buttonHeight = 62;
     constexpr int tabWidth = 220;
     constexpr int tabHeight = 78;
-    constexpr int gap = 24;
-    constexpr int totalWidth = buttonWidth + gap + tabWidth + gap + tabWidth + gap + buttonWidth;
+    // The extra tab expands the group to the left: PREVIEW/OPTIONS/ZL move
+    // left while the ZR button keeps its previous fixed X coordinate.
+    constexpr int gap = 40;
+    constexpr int totalWidth = buttonWidth + gap + tabWidth + gap + tabWidth + gap + tabWidth + gap + buttonWidth;
     const int startX = LogicalWidth - rightInset - totalWidth;
     const int y = (kTopBarHeight - tabHeight) / 2;
     if (zlTexture_ != nullptr) {
@@ -509,7 +511,7 @@ void TitlesSorterRenderer::DrawTopBar(bool previewActive) {
         SDL_RenderCopy(renderer_, zlTexture_, nullptr, &destination);
     } else DrawText("ZL", startX + 24, y + 24, 25, UiPalette::White);
 
-    const auto drawTab = [this, y](const char* label, int x, bool active) {
+    const auto drawTab = [this](const char* label, int x, bool active) {
         const SDL_Rect rect{x, y, tabWidth, tabHeight};
         DrawRoundedRect(rect, 18, active ? SDL_Color{77,223,202,255} : SDL_Color{255,255,255,235});
         TTF_Font* font = GetFont(34);
@@ -520,9 +522,11 @@ void TitlesSorterRenderer::DrawTopBar(bool previewActive) {
     };
     const int optionsX = startX + buttonWidth + gap;
     const int previewX = optionsX + tabWidth + gap;
-    drawTab("OPTIONS", optionsX, !previewActive);
-    drawTab("PREVIEW", previewX, previewActive);
-    const int zrX = previewX + tabWidth + gap;
+    const int applyX = previewX + tabWidth + gap;
+    drawTab("OPTIONS", optionsX, frame.screen == Screen::Settings && frame.section == UiSection::Options);
+    drawTab("PREVIEW", previewX, frame.screen == Screen::Preview || frame.screen == Screen::GeneratingPreview);
+    drawTab("APPLY", applyX, frame.screen == Screen::Settings && frame.section == UiSection::Apply);
+    const int zrX = applyX + tabWidth + gap;
     if (zrTexture_ != nullptr) {
         const SDL_Rect destination{zrX, (kTopBarHeight-buttonHeight)/2, buttonWidth, buttonHeight};
         SDL_RenderCopy(renderer_, zrTexture_, nullptr, &destination);
@@ -536,10 +540,10 @@ void TitlesSorterRenderer::DrawControllerHint(const char* button, const char* la
     DrawText(label, x + 66, y + 5, 25, UiPalette::White);
 }
 
-void TitlesSorterRenderer::DrawBottomBar(const std::string& footer) {
+void TitlesSorterRenderer::DrawBottomBar(const std::string& footer, UiFooterMode mode) {
     DrawGradient({0, LogicalHeight-kBottomBarHeight, LogicalWidth, kBottomBarHeight},
                  UiPalette::BottomBarStart, UiPalette::BottomBarEnd);
-    const bool settings = footer.find("Navigate Options") != std::string::npos;
+    const bool settings = footer.find("Navigate Options") != std::string::npos || footer.find("Navigate Actions") != std::string::npos || footer.find("Navigate Backups") != std::string::npos;
     const bool insideFolder = footer.find("Back to Home Menu") != std::string::npos;
     constexpr int fontSize = 36;
     constexpr int glyphSize = 46;
@@ -574,12 +578,35 @@ void TitlesSorterRenderer::DrawBottomBar(const std::string& footer) {
         return left + (right - left - totalWidth) / 2;
     };
 
+    if (mode != UiFooterMode::Standard) {
+        const int drawExitEnd = drawCenteredExit();
+        if (mode == UiFooterMode::Decision) {
+            // Decision frames retain the backup-list B/Cancel action. Place A/Confirm
+            // in the remaining right-hand region without overlapping B/Cancel.
+            constexpr int cancelX = LogicalWidth - 230;
+            const int confirmWidth = glyphSize + gap + measureText("Confirm");
+            const int confirmX = drawExitEnd + (cancelX - drawExitEnd - confirmWidth) / 2;
+            drawAction("\xee\x80\x80", "A", "Confirm", confirmX);
+            drawAction("\xee\x80\x81", "B", "Cancel", cancelX);
+        } else {
+            // Operation-result screens expose Exit and A/Confirm only.
+            const int confirmX = centeredInRightRegion("Confirm", drawExitEnd);
+            drawAction("\xee\x80\x80", "A", "Confirm", confirmX);
+        }
+        return;
+    }
+
     if (settings) {
-        int end = drawAction("\xee\x81\xbd", "D-PAD", "Navigate Options", 24); // E07D
+        const bool applyPanel = footer.find("Navigate Actions") != std::string::npos || footer.find("Navigate Backups") != std::string::npos;
+        const char* navigation = footer.find("Navigate Backups") != std::string::npos ? "Navigate Backups" : (applyPanel ? "Navigate Actions" : "Navigate Options");
+        int end = drawAction("\xee\x81\xbd", "D-PAD", navigation, 24); // E07D
         drawAction("\xee\x81\xbe", "D-PAD", "Change Option", end + 70); // E07E
         const int drawExitEnd = drawCenteredExit();
-        const int editX = centeredInRightRegion("Edit Text", drawExitEnd);
-        drawAction("\xee\x80\x80", "A", "Edit Text", editX);
+        const char* selectLabel = applyPanel ? "Select" : "Edit Text";
+        const int editX = centeredInRightRegion(selectLabel, drawExitEnd);
+        drawAction("\xee\x80\x80", "A", selectLabel, editX);
+        if (footer.find("Navigate Backups") != std::string::npos)
+            drawAction("\xee\x80\x81", "B", "Cancel", LogicalWidth - 230);
     } else {
         int end = drawAction("\xee\x81\x81", "D-PAD", "Navigate Titles", 24); // E041
         const int pairX = end + 70;
@@ -607,19 +634,22 @@ void TitlesSorterRenderer::DrawSettingsRow(const SettingsRowView& row, int y, in
         // Layout follows the supplied sketch: label and textbox share the top line;
         // explanatory copy sits beneath the label and ends before the textbox.
         const SDL_Rect textbox{1245, y + 22, 545, 116};
+        const std::string label(row.label);
         int excludedLabelHeight = 0;
         TTF_Font* excludedLabelFont = GetFont(48);
         if (excludedLabelFont != nullptr)
-            TTF_SizeUTF8(excludedLabelFont, "Excluded Pages", nullptr, &excludedLabelHeight);
-        DrawText("Excluded Pages", 112,
-                 textbox.y + (textbox.h - excludedLabelHeight) / 2, 48, UiPalette::Text, 560);
+            TTF_SizeUTF8(excludedLabelFont, label.c_str(), nullptr, &excludedLabelHeight);
+        DrawText(label, 112,
+                 textbox.y + (textbox.h - excludedLabelHeight) / 2, 48, UiPalette::Text,
+                 label == "Excluded Pages" ? 560 : 1080);
         DrawRoundedBorder(textbox, 14, 2, row.selected ? UiPalette::Accent : UiPalette::Border,
                           SDL_Color{239,244,249,255});
-        const std::string value = (row.value.empty() || row.value == "None")
+        const std::string value = (label == "Excluded Pages" && (row.value.empty() || row.value == "None"))
             ? "Example: 1-3, 8, 11" : row.value;
         DrawText(value, textbox.x + 18, textbox.y + 37, 42, UiPalette::Muted, textbox.w-36);
-        DrawText("The excluded pages and their content won't be reordered.",
-                 112, y + 151, 38, UiPalette::Muted, 1640);
+        if (label == "Excluded Pages")
+            DrawText("The excluded pages and their content won't be reordered.",
+                     112, y + 151, 38, UiPalette::Muted, 1640);
         return;
     }
 
@@ -656,6 +686,220 @@ void TitlesSorterRenderer::DrawSettingsRow(const SettingsRowView& row, int y, in
     DrawText(">", centreX+chevronOffset-8, y+(card.h-52)/2, 52, UiPalette::TopBarEnd);
 }
 
+void TitlesSorterRenderer::DrawApply(const UiFrame& frame) {
+    // Decision and operation-result frames use an uncluttered, full-screen layout.
+    if (frame.applyConfirmation != ApplyConfirmation::None) {
+        const auto drawCentred = [this](const std::string& text, int y,
+                                        int size, SDL_Color color) {
+            if (text.empty()) return;
+            int width = 0;
+            TTF_Font* font = GetFont(size);
+            if (font != nullptr) TTF_SizeUTF8(font, text.c_str(), &width, nullptr);
+            DrawText(text, (LogicalWidth - width) / 2, y, size, color, LogicalWidth - 96);
+        };
+        const auto drawWrappedCentred = [this](const std::string& text, int topY,
+                                                int size, int maximumWidth,
+                                                SDL_Color color) {
+            if (text.empty()) return;
+            TTF_Font* font = GetFont(size);
+            if (font == nullptr) return;
+            std::vector<std::string> lines;
+            std::string line;
+            std::string token;
+            const auto appendToken = [&]() {
+                if (token.empty()) return;
+                std::string candidate = line.empty() ? token : line + " " + token;
+                int width = 0;
+                TTF_SizeUTF8(font, candidate.c_str(), &width, nullptr);
+                if (width <= maximumWidth) {
+                    line = std::move(candidate);
+                } else {
+                    if (!line.empty()) lines.push_back(std::move(line));
+                    line.clear();
+                    std::string part;
+                    for (char ch : token) {
+                        part.push_back(ch);
+                        int partWidth = 0;
+                        TTF_SizeUTF8(font, part.c_str(), &partWidth, nullptr);
+                        if (partWidth > maximumWidth && part.size() > 1U) {
+                            const char last = part.back();
+                            part.pop_back();
+                            lines.push_back(std::move(part));
+                            part.assign(1U, last);
+                        }
+                    }
+                    line = std::move(part);
+                }
+                token.clear();
+            };
+            for (char ch : text) {
+                if (ch == ' ' || ch == '\n' || ch == '\t') {
+                    appendToken();
+                    if (ch == '\n' && !line.empty()) {
+                        lines.push_back(std::move(line));
+                        line.clear();
+                    }
+                } else token.push_back(ch);
+            }
+            appendToken();
+            if (!line.empty()) lines.push_back(std::move(line));
+            int y = topY;
+            for (const std::string& wrappedLine : lines) {
+                int width = 0, height = 0;
+                TTF_SizeUTF8(font, wrappedLine.c_str(), &width, &height);
+                DrawText(wrappedLine, (LogicalWidth - width) / 2, y, size,
+                         color, maximumWidth);
+                y += height + 8;
+            }
+        };
+
+        switch (frame.applyConfirmation) {
+            case ApplyConfirmation::RestoreDecision:
+                drawCentred("Are you sure you want to restore this backup?", 420, 53, UiPalette::Text);
+                drawWrappedCentred(frame.dialogDetail, 555, 38, LogicalWidth - 160, UiPalette::Muted);
+                break;
+            case ApplyConfirmation::ApplyLayoutDecision:
+                drawWrappedCentred("Are you sure you want to\napply the previewed layout?",
+                                    455, 53, LogicalWidth - 160, UiPalette::Text);
+                break;
+            case ApplyConfirmation::BackupResult:
+                drawCentred(frame.message, 420, 60,
+                            frame.message == "Backup Completed !!!" ? UiPalette::Text : UiPalette::Error);
+                drawWrappedCentred(frame.dialogDetail, 555, 35, LogicalWidth - 160, UiPalette::Muted);
+                break;
+            case ApplyConfirmation::RestoreResult:
+                drawCentred(frame.message, 420, 60,
+                            frame.message == "Backup Restored !!!" ? UiPalette::Text : UiPalette::Error);
+                drawWrappedCentred(frame.dialogDetail, 555, 35, LogicalWidth - 160, UiPalette::Muted);
+                break;
+            case ApplyConfirmation::ApplyResult:
+                drawCentred(frame.message, 420, 60,
+                            frame.message == "Layout Applied !!!" ? UiPalette::Text : UiPalette::Error);
+                drawWrappedCentred(frame.dialogDetail, 555, 35, LogicalWidth - 160, UiPalette::Muted);
+                break;
+            case ApplyConfirmation::PreviewRequired:
+                drawCentred(frame.message, 420, 60, UiPalette::Text);
+                break;
+            case ApplyConfirmation::None:
+                break;
+        }
+        return;
+    }
+
+    DrawText(frame.showingBackupList ? "Restore Backup" : "Apply and Backups", 72, 158, 57, UiPalette::Text);
+    if (frame.showingBackupList) {
+        DrawText("Select a backup.", 72, 230, 38, UiPalette::Muted);
+        DrawText("Manual and automatic backups are listed newest first.", 72, 276, 38, UiPalette::Muted);
+        constexpr int firstY = 340;
+        constexpr int rowHeight = 92;
+        if (frame.backupNames.empty()) {
+            DrawText("No backups found.", 112, 400, 42, UiPalette::Muted);
+        } else {
+            const std::size_t first = frame.selectedBackup > 3U ? frame.selectedBackup - 3U : 0U;
+            const std::size_t count = std::min<std::size_t>(7U, frame.backupNames.size() - first);
+            for (std::size_t i = 0; i < count; ++i) {
+                const std::size_t index = first + i;
+                const SDL_Rect card{72, firstY + static_cast<int>(i) * rowHeight, 1776, 76};
+                if (index == frame.selectedBackup) DrawRoundedBorder(card, 16, 4, UiPalette::Accent, UiPalette::SelectedFill);
+                else DrawRoundedRect(card, 16, UiPalette::White);
+                const std::string& fullPath = frame.backupNames[index];
+                const std::size_t separator = fullPath.find_last_of("/\\");
+                const std::string displayName = separator == std::string::npos ? fullPath : fullPath.substr(separator + 1U);
+                DrawText(displayName, 108, card.y + 17, 32, index == frame.selectedBackup ? UiPalette::TopBarEnd : UiPalette::Text, 1680);
+            }
+        }
+        return;
+    }
+
+    DrawText("Manage save backups and apply the layout currently shown in Preview.",
+             72, 230, 38, UiPalette::Muted);
+
+    constexpr int controlX = 72;
+    constexpr int controlWidth = 1776;
+    constexpr int controlHeight = 104;
+    constexpr int firstY = 270;
+    constexpr int regularGap = 10;
+    constexpr int majorGap = 70;
+    constexpr int applyBlockOffset = 25;
+    const int autoY = firstY + applyBlockOffset;
+    const int maxY = autoY + controlHeight + regularGap;
+    const int createY = maxY + controlHeight + majorGap;
+    const int restoreY = createY + controlHeight + regularGap;
+    const int applyY = restoreY + controlHeight + majorGap - applyBlockOffset;
+
+    const auto drawCard = [this](const SDL_Rect& rect, bool selected) {
+        if (selected) DrawRoundedBorder(rect, 20, 4, UiPalette::Accent, UiPalette::SelectedFill);
+        else DrawRoundedRect(rect, 20, UiPalette::White);
+    };
+    const SDL_Rect autoRect{controlX, autoY, controlWidth, controlHeight};
+    drawCard(autoRect, frame.applyRows[0].selected);
+    TTF_Font* labelFont = GetFont(48);
+    int labelHeight = 0;
+    if (labelFont != nullptr) TTF_SizeUTF8(labelFont, "Autobackup", nullptr, &labelHeight);
+    DrawText("Autobackup", controlX + 40, autoY + (controlHeight - labelHeight) / 2,
+             48, UiPalette::Text);
+    TTF_Font* valueFont = GetFont(52);
+    // Keep the value group visually balanced and shift it left by one character
+    // relative to the previous alignment. The explicit spaces produce
+    // the requested "<  Enabled  >" / "<  Disabled  >" presentation.
+    const std::string autoBackupValue = "  " + std::string(frame.applyRows[0].value) + "  ";
+    int autoValueWidth = 0, autoValueHeight = 0;
+    int bracketWidth = 0, bracketHeight = 0, characterWidth = 0;
+    if (valueFont != nullptr) {
+        TTF_SizeUTF8(valueFont, autoBackupValue.c_str(), &autoValueWidth, &autoValueHeight);
+        TTF_SizeUTF8(valueFont, "<", &bracketWidth, &bracketHeight);
+        TTF_SizeUTF8(valueFont, "M", &characterWidth, nullptr);
+    }
+    const int groupGap = 4;
+    const int groupWidth = bracketWidth + groupGap + autoValueWidth + groupGap + bracketWidth;
+    const int groupCenterX = controlX + controlWidth - 230 - characterWidth;
+    const int groupX = groupCenterX - groupWidth / 2;
+    const int bracketY = autoY + (controlHeight - bracketHeight) / 2;
+    DrawText("<", groupX, bracketY, 52, UiPalette::TopBarEnd);
+    DrawText(autoBackupValue, groupX + bracketWidth + groupGap,
+             autoY + (controlHeight - autoValueHeight) / 2, 52,
+             frame.applyRows[0].selected ? UiPalette::TopBarEnd : UiPalette::Muted);
+    DrawText(">", groupX + bracketWidth + groupGap + autoValueWidth + groupGap,
+             bracketY, 52, UiPalette::TopBarEnd);
+
+    const SDL_Rect maxRect{controlX, maxY, controlWidth, controlHeight};
+    drawCard(maxRect, frame.applyRows[1].selected);
+    DrawText(std::string(frame.applyRows[1].label), controlX + 40,
+             maxY + (controlHeight - labelHeight) / 2, 48, UiPalette::Text, 1050);
+    const SDL_Rect numberField{controlX + controlWidth - 545, maxY + 10, 505, controlHeight - 20};
+    DrawRoundedBorder(numberField, 14, 2,
+                      frame.applyRows[1].selected ? UiPalette::Accent : UiPalette::Border,
+                      SDL_Color{239,244,249,255});
+    int numberWidth = 0, numberHeight = 0;
+    if (valueFont != nullptr) TTF_SizeUTF8(valueFont, frame.applyRows[1].value.c_str(),
+                                           &numberWidth, &numberHeight);
+    DrawText(frame.applyRows[1].value,
+             numberField.x + (numberField.w - numberWidth) / 2,
+             numberField.y + (numberField.h - numberHeight) / 2,
+             52, frame.applyRows[1].selected ? UiPalette::TopBarEnd : UiPalette::Muted);
+
+    const auto drawActionCard = [&](int y, const ApplyRowView& row) {
+        const SDL_Rect rect{controlX, y, controlWidth, controlHeight};
+        drawCard(rect, row.selected);
+        int textWidth = 0, textHeight = 0;
+        if (labelFont != nullptr) TTF_SizeUTF8(labelFont, std::string(row.label).c_str(),
+                                                &textWidth, &textHeight);
+        DrawText(std::string(row.label), rect.x + (rect.w - textWidth) / 2,
+                 rect.y + (rect.h - textHeight) / 2, 48,
+                 row.interactive ? UiPalette::Text : UiPalette::Muted, rect.w - 48);
+    };
+    drawActionCard(createY, frame.applyRows[2]);
+    drawActionCard(restoreY, frame.applyRows[3]);
+    drawActionCard(applyY, frame.applyRows[4]);
+
+    if (!frame.message.empty()) {
+        const bool failed = frame.message.find("failed") != std::string::npos ||
+                            frame.message.find("Unable") != std::string::npos ||
+                            frame.message.find("invalid") != std::string::npos;
+        DrawText(frame.message, 72, 958, 24, failed ? UiPalette::Error : UiPalette::Muted, 1776);
+    }
+}
+
 void TitlesSorterRenderer::DrawSettings(const UiFrame& frame) {
     DrawText("Sorting Options", 72, 158, 57, UiPalette::Text);
     DrawText("Choose how your Home Menu titles and folders should be arranged.",
@@ -677,7 +921,7 @@ void TitlesSorterRenderer::DrawLoading(std::uint32_t elapsedMilliseconds) {
         DrawText(value, panel.x + (panel.w - width) / 2, y, size, color, panel.w - 48);
     };
     drawPanelCentredText("Loading Home Menu", 345, 63, UiPalette::Text);
-    drawPanelCentredText("Reading the active account and", 435, 36, UiPalette::Muted);
+    drawPanelCentredText("Reading the Home Menu save and", 435, 36, UiPalette::Muted);
     constexpr int descriptionY = 480;
     constexpr int descriptionSize = 36;
     const char* description = "installed title metadata...";
@@ -936,9 +1180,9 @@ void TitlesSorterRenderer::DrawPreview(const UiFrame& frame) {
 void TitlesSorterRenderer::Draw(const UiFrame& frame, std::uint32_t elapsedMilliseconds) {
     if (!initialized_ || renderer_ == nullptr) return;
     DrawBackground();
-    DrawTopBar(frame.screen == Screen::Preview);
+    DrawTopBar(frame);
     switch (frame.screen) {
-        case Screen::Settings: DrawSettings(frame); break;
+        case Screen::Settings: if (frame.section == UiSection::Apply) DrawApply(frame); else DrawSettings(frame); break;
         case Screen::LoadingData: DrawLoading(elapsedMilliseconds); break;
         case Screen::GeneratingPreview: DrawGenerating(elapsedMilliseconds); break;
         case Screen::Preview: DrawPreview(frame); break;
@@ -974,7 +1218,8 @@ void TitlesSorterRenderer::Draw(const UiFrame& frame, std::uint32_t elapsedMilli
             SDL_RenderDrawRect(renderer_, &outline);
         }
     }
-    DrawBottomBar(frame.screen == Screen::LoadingData ? "Navigate Options" : frame.footer);
+    DrawBottomBar(frame.screen == Screen::LoadingData ? "Navigate Options" : frame.footer,
+                  frame.footerMode);
     SDL_RenderPresent(renderer_);
 }
 
