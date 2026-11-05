@@ -1,0 +1,13 @@
+build/
+build-*/
+*.o
+*.d
+*.elf
+*.rpx
+*.wuhb
+provider_test_data/
+
+# Python build-tool artefacts
+__pycache__/
+*.pyc
+tests/fixtures/sample_menu_save.dat
